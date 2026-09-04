@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CroShy Anı — Paylaşılan Anılar</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/img/logo-64.png" />
+<link rel="apple-touch-icon" href="/img/logo-192.png" />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="no-scroll">
+
+  <div id="intro">
+    <div class="intro-inner">
+      <div class="intro-visual">
+        <div class="intro-glow"></div>
+        <div class="intro-logo" id="introLogo">CroShy Anı</div>
+      </div>
+      <div class="intro-bar"><span></span></div>
+    </div>
+  </div>
+
+  <div class="bg-blobs">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+  </div>
+
+  <header class="site">
+    <a href="/" class="brand"><span class="brand-mark-wrap"><img src="/img/logo-192.png" alt="CroShy Anı logosu" /></span><span class="brand-text">CroShy Anı</span></a>
+    <nav class="site-nav">
+      <div class="social-dropdown" id="socialDropdown">
+        <button type="button" class="yt-link social-trigger" aria-label="Bağlantılar" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9.5 14.5 14.5 9.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M11 6.5 12.7 4.8a3.2 3.2 0 0 1 4.5 4.5L15.5 11" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13 17.5 11.3 19.2a3.2 3.2 0 0 1-4.5-4.5L8.5 13" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="social-menu">
+          <a href="https://youtube.com/CroShy" target="_blank" rel="noopener" class="social-menu-item">
+            <svg class="social-icon" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+              <rect width="28" height="28" rx="7" fill="#FF0000"/>
+              <path d="M11.5 9.4L19.6 14L11.5 18.6V9.4Z" fill="white"/>
+            </svg>
+            YouTube
+          </a>
+          <a href="https://discord.gg/Vp8JcCynZF" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-discord.png" alt="" />
+            Discord
+          </a>
+          <a href="https://kick.com/croshy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-kick.png" alt="" />
+            Kick
+          </a>
+          <a href="https://twitch.tv/croshyy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-twitch.png" alt="" />
+            Twitch
+          </a>
+          <a href="https://bynogame.com/destekle/croshy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon wordmark" src="/img/social-bynogame.png" alt="" />
+            Bağış Yap
+          </a>
+        </div>
+      </div>
+      <a href="/upload" class="btn primary">+ Anı Ekle</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <span class="eyebrow">Paylaşılan Anılar</span>
+    <h1>Her an, <span class="gradient-text">birlikte</span><br/>biriktirdiğimiz bir hikâye.</h1>
+    <p>Fotoğraf ya da kısa video ekle, biz onaylayalım, herkesin göreceği anı defterine katılsın.</p>
+    <div class="actions">
+      <a href="/upload" class="btn primary">Bir Anı Paylaş</a>
+      <a href="#galeri" class="btn ghost">Anıları Gör ↓</a>
+    </div>
+  </section>
+
+  <section class="gallery-section" id="galeri">
+    <div class="gallery-head">
+      <div>
+        <h2>Onaylanmış Anılar</h2>
+        <p id="gallery-count">Yükleniyor…</p>
+      </div>
+      <div class="sort-controls" id="sortControls">
+        <button type="button" class="sort-btn active" data-sort="algorithm">Önerilen</button>
+        <button type="button" class="sort-btn" data-sort="newest">En Yeni</button>
+        <button type="button" class="sort-btn" data-sort="oldest">En Eski</button>
+        <button type="button" class="sort-btn" data-sort="likes">En Çok Beğenilen</button>
+      </div>
+    </div>
+    <div class="memory-timeline" id="memory-timeline">
+      <div class="empty-state">Anılar yükleniyor…</div>
+    </div>
+  </section>
+
+  <footer class="site">CroShy Anı · Sevgiyle biriktirildi</footer>
+
+  <script src="/js/social-menu.js"></script>
+  <script src="/js/lightbox.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>
