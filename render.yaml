@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: croshy-ani
+    env: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_UPLOAD_PRESET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+    # Not: Kalıcı disk YOK — tüm veriler (kullanıcılar, anılar, beğeniler,
+    # yasaklar) Supabase'de (Postgres) tutuluyor, medya Cloudinary'de.
+    # Bu servis tamamen "stateless" — Render'ın ücretsiz planında bile
+    # her deploy'da veri kaybı yaşanmaz.

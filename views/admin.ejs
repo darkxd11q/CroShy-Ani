@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Panel — CroShy Anı</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/img/logo-64.png" />
+<link rel="apple-touch-icon" href="/img/logo-192.png" />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <div class="bg-blobs">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+  </div>
+
+  <header class="site">
+    <a href="/" class="brand"><span class="brand-mark-wrap"><img src="/img/logo-192.png" alt="CroShy Anı logosu" /></span><span class="brand-text">CroShy Anı</span> <span style="color:var(--text-dim); font-weight:500; font-size:0.85rem; margin-left:2px;">· Admin</span></a>
+    <nav class="site-nav">
+      <div class="social-dropdown" id="socialDropdown">
+        <button type="button" class="yt-link social-trigger" aria-label="Bağlantılar" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9.5 14.5 14.5 9.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M11 6.5 12.7 4.8a3.2 3.2 0 0 1 4.5 4.5L15.5 11" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13 17.5 11.3 19.2a3.2 3.2 0 0 1-4.5-4.5L8.5 13" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="social-menu">
+          <a href="https://youtube.com/CroShy" target="_blank" rel="noopener" class="social-menu-item">
+            <svg class="social-icon" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+              <rect width="28" height="28" rx="7" fill="#FF0000"/>
+              <path d="M11.5 9.4L19.6 14L11.5 18.6V9.4Z" fill="white"/>
+            </svg>
+            YouTube
+          </a>
+          <a href="https://discord.gg/Vp8JcCynZF" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-discord.png" alt="" />
+            Discord
+          </a>
+          <a href="https://kick.com/croshy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-kick.png" alt="" />
+            Kick
+          </a>
+          <a href="https://twitch.tv/croshyy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-twitch.png" alt="" />
+            Twitch
+          </a>
+          <a href="https://bynogame.com/destekle/croshy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon wordmark" src="/img/social-bynogame.png" alt="" />
+            Bağış Yap
+          </a>
+        </div>
+      </div>
+      <a href="/" class="btn ghost">Siteyi Gör</a>
+      <form method="POST" action="/admin/logout">
+        <button type="submit" class="btn small">Çıkış Yap</button>
+      </form>
+    </nav>
+  </header>
+
+  <div class="admin-wrap">
+    <div class="admin-topbar">
+      <div>
+        <h2 style="margin:0;">Onay Bekleyenler</h2>
+        <div class="admin-stat">Hoşgeldin, <%= username %> · <%= pending.length %> bekleyen · <%= approvedCount %> onaylı anı yayında</div>
+      </div>
+    </div>
+
+    <div class="pending-list" id="pending-list">
+      <% if (pending.length === 0) { %>
+        <div class="empty-state">Şu an onay bekleyen anı yok 🎉</div>
+      <% } %>
+
+      <% pending.forEach(function(item) { %>
+        <div class="pending-item" data-id="<%= item.id %>">
+          <div class="thumb"
+               data-url="<%= item.url %>"
+               data-type="<%= item.type %>"
+               data-name="<%= item.uploaderName %>"
+               data-caption="<%= item.caption %>">
+            <% if (item.type === 'video') { %>
+              <video src="<%= item.url %>" muted loop autoplay playsinline></video>
+              <div class="play-icon" style="width:40px;height:40px;font-size:1rem;">▶</div>
+            <% } else { %>
+              <img src="<%= item.url %>" alt="" />
+            <% } %>
+          </div>
+          <div class="info">
+            <div class="name"><%= item.uploaderName %> <span style="color:var(--text-dim); font-weight:400;">— <%= item.type === 'video' ? 'video' : 'fotoğraf' %></span></div>
+            <% if (item.caption) { %><div class="caption"><%= item.caption %></div><% } %>
+            <div class="date"><%= new Date(item.createdAt).toLocaleString('tr-TR') %> · IP: <%= item.ip || 'bilinmiyor' %></div>
+          </div>
+          <div class="actions">
+            <button class="btn approve small" data-action="approve" data-id="<%= item.id %>">✓ Onayla</button>
+            <button class="btn danger small" data-action="reject" data-id="<%= item.id %>">✕ Reddet</button>
+            <button class="btn danger small" data-action="ban" data-id="<%= item.id %>" title="Bu IP'yi yasakla ve bekleyen tüm gönderilerini sil">🚫 IP Yasakla</button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
+        <h2 style="margin:0;">Yasaklı IP'ler</h2>
+        <div class="admin-stat"><%= bans.length %> IP adresi yasaklı — anı gönderemez (görüntüleme etkilenmez)</div>
+      </div>
+    </div>
+
+    <div class="pending-list" id="ban-list">
+      <% if (bans.length === 0) { %>
+        <div class="empty-state">Şu an yasaklı IP yok</div>
+      <% } %>
+      <% bans.forEach(function(b) { %>
+        <div class="pending-item" data-ip-row="<%= b.ip %>" style="align-items:center;">
+          <div class="info">
+            <div class="name">
+              IP: <%= b.ip %>
+              <span style="color:var(--text-dim); font-weight:400;">
+                — hesap: <%= (b.usernames && b.usernames.length) ? b.usernames.join(', ') : 'bilinmiyor' %>
+              </span>
+            </div>
+            <div class="date">Yasaklandı: <%= new Date(b.bannedAt).toLocaleString('tr-TR') %></div>
+          </div>
+          <div class="actions">
+            <button class="btn approve small" data-action="unban" data-ip="<%= b.ip %>">Yasağı Kaldır</button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
+        <h2 style="margin:0;">Dosya Boyutu Sınırı Muafiyeti</h2>
+        <div class="admin-stat">Bir kullanıcı adı girerek o hesabın foto/video boyut sınırını kaldırabilirsin</div>
+      </div>
+    </div>
+
+    <div class="upload-card" style="margin-bottom: 8px;">
+      <form id="exempt-form" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <input type="text" id="exemptUsername" placeholder="Kullanıcı adı" maxlength="10"
+               style="flex:1; min-width:160px; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        <button type="submit" class="btn primary small">Sınırı Kaldır</button>
+      </form>
+      <div class="status-msg" id="exemptStatus"></div>
+    </div>
+
+    <div class="pending-list" id="exempt-list">
+      <% if (exemptUsers.length === 0) { %>
+        <div class="empty-state">Şu an sınırı kaldırılmış bir kullanıcı yok</div>
+      <% } %>
+      <% exemptUsers.forEach(function(u) { %>
+        <div class="pending-item" data-username-row="<%= u.username %>" style="align-items:center;">
+          <div class="info">
+            <div class="name"><%= u.username %> <span style="color:var(--text-dim); font-weight:400;">— sınırsız yükleme</span></div>
+          </div>
+          <div class="actions">
+            <button class="btn danger small" data-action="unexempt" data-username="<%= u.username %>">Sınırı Geri Getir</button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+
+  <script src="/js/social-menu.js"></script>
+  <script src="/js/lightbox.js"></script>
+  <script src="/js/admin.js"></script>
+
+</body>
+</html>
