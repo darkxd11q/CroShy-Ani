@@ -13,6 +13,7 @@ const bans = require('./bans');
 const logs = require('./logs');
 const likes = require('./likes');
 const viewsStore = require('./views_store');
+const rememberTokens = require('./rememberTokens');
 const {
   safeStringEqual,
   verifyPassword,
@@ -33,8 +34,15 @@ const isProd = process.env.NODE_ENV === 'production';
 const DAILY_SUBMIT_LIMIT = 2;
 const MAX_IMAGE_BYTES = 8.5 * 1024 * 1024; // 8.5 MB
 const MAX_VIDEO_BYTES = 40 * 1024 * 1024; // 40 MB
+const MAX_VIDEO_DURATION_SEC = 150; // 2 dakika 30 saniye
 
-app.set('trust proxy', 1);
+// "trust proxy" SADECE üretimde (Render'ın tek katmanlı ters proxy'si arkasında)
+// açık olmalı. Yerelde (npm start ile doğrudan çalıştırırken) bunu açık
+// bırakmak, herkesin sahte bir X-Forwarded-For başlığıyla IP'sini
+// değiştirebilmesine (spoof) izin verir — bu da admin panelindeki IP
+// adreslerinin yanlış/güvenilmez görünmesine yol açan asıl sebepti.
+// NODE_ENV=production Render'da otomatik ayarlanır.
+app.set('trust proxy', isProd ? 1 : false);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
@@ -57,6 +65,111 @@ app.use(
     },
   })
 );
+
+// ---------- "Beni hatırla" / otomatik giriş ----------
+// Oturum çerezi (üstteki) kasıtlı olarak kısa ömürlü (8 saat) — güvenlik
+// için. Ama kullanıcı bir kere giriş yaptıktan sonra tarayıcıyı kapatıp
+// tekrar açtığında yeniden şifre girmesin diye, AYRI ve çok daha uzun ömürlü
+// (90 gün) bir "hatırlama" çerezi + Supabase'de tuttuğumuz hash'lenmiş bir
+// token kullanıyoruz. Oturum süresi dolduğunda ama hatırlama çerezi hâlâ
+// geçerliyse, aşağıdaki middleware sessizce yeni bir oturum açar.
+const REMEMBER_COOKIE = 'croshy_remember';
+const REMEMBER_MS = 90 * 24 * 60 * 60 * 1000; // 90 gün
+
+function sha256(str) {
+  return crypto.createHash('sha256').update(String(str)).digest('hex');
+}
+
+function getCookie(req, name) {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx === -1) continue;
+    const key = part.slice(0, idx).trim();
+    if (key === name) return decodeURIComponent(part.slice(idx + 1).trim());
+  }
+  return null;
+}
+
+async function issueRememberCookie(res, { subjectType, subjectId, username }) {
+  const raw = crypto.randomBytes(32).toString('hex');
+  const tokenHash = sha256(raw);
+  await rememberTokens.create({
+    tokenHash,
+    subjectType,
+    subjectId,
+    username,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + REMEMBER_MS,
+  });
+  res.cookie(REMEMBER_COOKIE, raw, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: isProd,
+    maxAge: REMEMBER_MS,
+    path: '/',
+  });
+}
+
+async function clearRememberCookie(req, res) {
+  const raw = getCookie(req, REMEMBER_COOKIE);
+  if (raw) {
+    try {
+      await rememberTokens.remove(sha256(raw));
+    } catch (e) {
+      console.error('remember token silme hatası:', e.message);
+    }
+  }
+  res.clearCookie(REMEMBER_COOKIE, { path: '/' });
+}
+
+// Her istekte: aktif bir oturum yoksa ama geçerli bir "hatırlama" çerezi
+// varsa, sessizce oturumu yeniden kur. Token tek kullanımlıktır (kullanılınca
+// hemen yenisiyle değiştirilir) — biri bu çerezi çalarsa eski token zaten
+// geçersizleşmiş olur ve kullanıcı bir sonraki ziyaretinde fark edebilir.
+app.use(async (req, res, next) => {
+  if (req.session && (req.session.userId || req.session.isAdmin)) return next();
+
+  const raw = getCookie(req, REMEMBER_COOKIE);
+  if (!raw) return next();
+
+  try {
+    const record = await rememberTokens.findValid(sha256(raw));
+    if (!record) {
+      res.clearCookie(REMEMBER_COOKIE, { path: '/' });
+      return next();
+    }
+
+    await rememberTokens.remove(record.tokenHash);
+
+    req.session.regenerate(async (err) => {
+      if (err) return next();
+
+      if (record.subjectType === 'admin') {
+        req.session.isAdmin = true;
+      } else {
+        req.session.userId = record.subjectId;
+      }
+      req.session.username = record.username;
+      req.session.justAutoLoggedIn = true;
+
+      try {
+        await issueRememberCookie(res, {
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          username: record.username,
+        });
+      } catch (e) {
+        console.error('remember token yenileme hatası:', e.message);
+      }
+      next();
+    });
+  } catch (e) {
+    console.error('Otomatik giriş kontrolü hatası:', e.message);
+    next();
+  }
+});
 
 // Her giriş/kayıt formu kendi bağımsız brute-force sayaçlarını kullanır
 const adminGuard = createLoginGuard();
@@ -129,6 +242,7 @@ app.get('/api/config', (req, res) => {
     uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET || '',
     maxImageBytes: MAX_IMAGE_BYTES,
     maxVideoBytes: MAX_VIDEO_BYTES,
+    maxVideoDurationSec: MAX_VIDEO_DURATION_SEC,
   });
 });
 
@@ -227,7 +341,8 @@ app.post(
       });
     }
 
-    const { url, publicId, type, caption, bytes } = req.body;
+    const { url, publicId, type, caption, bytes, durationSec } = req.body;
+    const cleanCaption = (caption || '').toString().trim();
 
     if (!url || !publicId || !type) {
       return res.status(400).json({ error: 'Eksik veri gönderildi.' });
@@ -237,6 +352,16 @@ app.post(
     }
     if (!/^https:\/\/res\.cloudinary\.com\//.test(url)) {
       return res.status(400).json({ error: 'Geçersiz medya kaynağı.' });
+    }
+    if (!cleanCaption) {
+      // Boş açıklamayla gönderilen medyayı (client atlatılmış olsa bile)
+      // Cloudinary'den de sil, öylece Supabase dışında yetim kalmasın.
+      try {
+        await cloudinary.uploader.destroy(publicId, { resource_type: type });
+      } catch (e) {
+        console.error('Cloudinary silme hatası (açıklama yok):', e.message);
+      }
+      return res.status(400).json({ error: 'Açıklama yazman zorunlu.' });
     }
 
     // Dosya boyutu sınırı — admin panelinden muaf tutulan kullanıcılar hariç.
@@ -258,6 +383,19 @@ app.post(
       });
     }
 
+    // Video süresi sınırı — 2:30 (client tarafında kırpma denenir, ama
+    // Cloudinary'nin döndürdüğü gerçek süre burada son kez doğrulanır).
+    if (!isExempt && type === 'video' && typeof durationSec === 'number' && durationSec > MAX_VIDEO_DURATION_SEC + 2) {
+      try {
+        await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+      } catch (e) {
+        console.error('Cloudinary silme hatası (süre aşımı):', e.message);
+      }
+      return res.status(413).json({
+        error: `Video çok uzun (${Math.round(durationSec)} sn). Videolar en fazla 2 dakika 30 saniye olabilir.`,
+      });
+    }
+
     const item = {
       id: crypto.randomUUID(),
       url,
@@ -268,7 +406,7 @@ app.post(
       uploaderName: req.session.username,
       userId: req.session.userId,
       ip,
-      caption: (caption || '').toString().slice(0, 200),
+      caption: cleanCaption.slice(0, 200),
       status: 'pending',
       createdAt: Date.now(),
     };
@@ -282,6 +420,8 @@ app.post(
 // ---------- Kullanıcı girişi / kaydı ----------
 
 app.get('/login', (req, res) => {
+  // Otomatik giriş middleware'i bu isteğe kadar oturumu zaten kurmuş olabilir
+  if (req.session && req.session.userId) return res.redirect('/upload');
   res.render('login', { error: null });
 });
 
@@ -310,16 +450,22 @@ app.post(
 
     userGuard.resetAttempts(ip);
 
-    req.session.regenerate((err) => {
+    req.session.regenerate(async (err) => {
       if (err) return res.render('login', { error: 'Bir hata oluştu, tekrar dene.' });
       req.session.userId = user.id;
       req.session.username = user.username;
+      try {
+        await issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+      } catch (e) {
+        console.error('remember token oluşturma hatası:', e.message);
+      }
       res.redirect('/upload');
     });
   })
 );
 
 app.get('/register', (req, res) => {
+  if (req.session && req.session.userId) return res.redirect('/upload');
   res.render('register', { error: null });
 });
 
@@ -362,65 +508,101 @@ app.post(
       throw e;
     }
 
-    req.session.regenerate((err) => {
+    req.session.regenerate(async (err) => {
       if (err) return res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });
       req.session.userId = user.id;
       req.session.username = user.username;
+      try {
+        await issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+      } catch (e) {
+        console.error('remember token oluşturma hatası:', e.message);
+      }
       res.redirect('/upload');
     });
   })
 );
 
-app.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('croshy.sid');
-    res.redirect('/login');
-  });
-});
+app.post(
+  '/logout',
+  asyncRoute(async (req, res) => {
+    await clearRememberCookie(req, res);
+    req.session.destroy(() => {
+      res.clearCookie('croshy.sid');
+      res.redirect('/login');
+    });
+  })
+);
 
 // ---------- Admin ----------
 
 app.get('/admin/login', (req, res) => {
+  if (req.session && req.session.isAdmin) return res.redirect('/admin');
   res.render('admin-login', { error: null });
 });
 
-app.post('/admin/login', adminLoginLimiter, (req, res) => {
-  const ip = req.ip;
-  const { locked, remainingMs } = adminGuard.getLoginStatus(ip);
+app.post(
+  '/admin/login',
+  adminLoginLimiter,
+  asyncRoute(async (req, res) => {
+    const ip = req.ip;
+    const { locked, remainingMs } = adminGuard.getLoginStatus(ip);
 
-  if (locked) {
-    const minutes = Math.ceil(remainingMs / 60000);
-    return res.status(429).render('admin-login', {
-      error: `Çok fazla başarısız deneme yapıldı. Lütfen ${minutes} dakika sonra tekrar dene.`,
+    if (locked) {
+      const minutes = Math.ceil(remainingMs / 60000);
+      return res.status(429).render('admin-login', {
+        error: `Çok fazla başarısız deneme yapıldı. Lütfen ${minutes} dakika sonra tekrar dene.`,
+      });
+    }
+
+    const { username, password } = req.body;
+    const expectedUsername = process.env.ADMIN_USERNAME || 'admin';
+    const expectedPassword = process.env.ADMIN_PASSWORD || '';
+
+    const usernameOk = safeStringEqual(username, expectedUsername);
+    const passwordOk = verifyPassword(password, expectedPassword);
+
+    if (!usernameOk || !passwordOk) {
+      adminGuard.registerFailedAttempt(ip);
+      return res.render('admin-login', { error: 'Kullanıcı adı veya şifre yanlış.' });
+    }
+
+    adminGuard.resetAttempts(ip);
+
+    req.session.regenerate(async (err) => {
+      if (err) return res.render('admin-login', { error: 'Bir hata oluştu, tekrar dene.' });
+      req.session.isAdmin = true;
+      req.session.username = expectedUsername;
+      try {
+        await issueRememberCookie(res, { subjectType: 'admin', subjectId: 'admin', username: expectedUsername });
+      } catch (e) {
+        console.error('remember token oluşturma hatası:', e.message);
+      }
+      res.redirect('/admin');
     });
-  }
+  })
+);
 
-  const { username, password } = req.body;
-  const expectedUsername = process.env.ADMIN_USERNAME || 'admin';
-  const expectedPassword = process.env.ADMIN_PASSWORD || '';
+app.post(
+  '/admin/logout',
+  asyncRoute(async (req, res) => {
+    await clearRememberCookie(req, res);
+    req.session.destroy(() => {
+      res.clearCookie('croshy.sid');
+      res.redirect('/admin/login');
+    });
+  })
+);
 
-  const usernameOk = safeStringEqual(username, expectedUsername);
-  const passwordOk = verifyPassword(password, expectedPassword);
-
-  if (!usernameOk || !passwordOk) {
-    adminGuard.registerFailedAttempt(ip);
-    return res.render('admin-login', { error: 'Kullanıcı adı veya şifre yanlış.' });
-  }
-
-  adminGuard.resetAttempts(ip);
-
-  req.session.regenerate((err) => {
-    if (err) return res.render('admin-login', { error: 'Bir hata oluştu, tekrar dene.' });
-    req.session.isAdmin = true;
-    req.session.username = expectedUsername;
-    res.redirect('/admin');
-  });
-});
-
-app.post('/admin/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('croshy.sid');
-    res.redirect('/admin/login');
+// Herhangi bir sayfa yükünde çağrılıp "otomatik giriş yapıldı" bilgisini
+// bir kereliğine döndüren, herkese açık uç nokta (giriş şart değil).
+app.get('/api/session-status', (req, res) => {
+  const justAuto = !!(req.session && req.session.justAutoLoggedIn);
+  if (req.session && justAuto) req.session.justAutoLoggedIn = false;
+  res.json({
+    loggedIn: !!(req.session && (req.session.userId || req.session.isAdmin)),
+    isAdmin: !!(req.session && req.session.isAdmin),
+    username: (req.session && req.session.username) || null,
+    justAutoLoggedIn: justAuto,
   });
 });
 

@@ -57,48 +57,82 @@ function renameToJpg(filename) {
   return base + '.jpg';
 }
 
-// ---------- Video sıkıştırma (deneysel, en iyi çaba ile) ----------
+// ---------- Video süresini öğrenme (kırpma gerekip gerekmediğine karar vermek için) ----------
+function getVideoDuration(file) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    const url = URL.createObjectURL(file);
+    video.src = url;
+    video.onloadedmetadata = () => {
+      const duration = video.duration;
+      URL.revokeObjectURL(url);
+      resolve(isFinite(duration) ? duration : null);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Video okunamadı.'));
+    };
+  });
+}
+
+// ---------- Video sıkıştırma + kırpma (deneysel, en iyi çaba ile) ----------
 // Modern tarayıcılarda (Chrome/Edge/Firefox) videoyu düşük çözünürlükte
-// yeniden kaydeder. Desteklenmiyorsa ya da bir sorun çıkarsa orijinal
-// dosyayı olduğu gibi döndürür — sunucu tarafı boyut kontrolü son güvence.
+// yeniden kaydeder; istenirse sadece belirli bir zaman aralığını
+// (trimStart .. trimStart+trimDuration) kaydeder. Desteklenmiyorsa ya da
+// bir sorun çıkarsa orijinal dosyayı olduğu gibi döndürür.
 function canCompressVideo() {
   const v = document.createElement('video');
   const hasCaptureStream = !!(v.captureStream || v.mozCaptureStream);
   return hasCaptureStream && typeof MediaRecorder !== 'undefined';
 }
 
-async function compressVideo(file, maxBytes, onProgress) {
-  // Zaten limitin epey altındaysa uğraşma
-  if (file.size <= maxBytes * 0.5) return file;
-  if (!canCompressVideo()) return file;
+async function compressVideo(file, maxBytes, opts = {}) {
+  const { onProgress, trimStart = 0, trimDuration = null } = opts;
+  const needsTrim = trimDuration !== null;
+
+  // Kırpma gerekmiyorsa ve dosya zaten küçükse hiç uğraşma
+  if (!needsTrim && file.size <= maxBytes * 0.5) return file;
+  if (!canCompressVideo()) return needsTrim ? null : file;
 
   try {
-    return await new Promise((resolve, reject) => {
+    return await new Promise((resolve) => {
       const video = document.createElement('video');
       video.preload = 'auto';
       video.muted = false;
       video.playsInline = true;
       video.src = URL.createObjectURL(file);
 
-      const cleanupAndFallback = () => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
         URL.revokeObjectURL(video.src);
-        resolve(file);
+        resolve(result);
       };
 
-      const safetyTimeout = setTimeout(cleanupAndFallback, 3 * 60 * 1000);
+      const safetyTimeout = setTimeout(() => finish(needsTrim ? null : file), 4 * 60 * 1000);
 
       video.onloadedmetadata = () => {
-        // Çok uzun videoları gerçek zamanlı yeniden kodlamak pratik değil
-        if (video.duration > 180 || !isFinite(video.duration)) {
+        const fullDuration = video.duration;
+
+        if (!needsTrim && (fullDuration > 180 || !isFinite(fullDuration))) {
           clearTimeout(safetyTimeout);
-          return cleanupAndFallback();
+          return finish(file);
         }
+
+        const start = isFinite(fullDuration)
+          ? Math.max(0, Math.min(trimStart, Math.max(0, fullDuration - 0.2)))
+          : trimStart;
+        const targetDuration = needsTrim
+          ? Math.min(trimDuration, isFinite(fullDuration) ? fullDuration - start : trimDuration)
+          : null;
 
         const MAX_W = 1280;
         const scale = video.videoWidth > MAX_W ? MAX_W / video.videoWidth : 1;
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(video.videoWidth * scale);
-        canvas.height = Math.round(video.videoHeight * scale);
+        canvas.width = Math.round(video.videoWidth * scale) || video.videoWidth;
+        canvas.height = Math.round(video.videoHeight * scale) || video.videoHeight;
         const ctx = canvas.getContext('2d');
 
         let stream;
@@ -109,7 +143,7 @@ async function compressVideo(file, maxBytes, onProgress) {
           stream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
         } catch {
           clearTimeout(safetyTimeout);
-          return cleanupAndFallback();
+          return finish(needsTrim ? null : file);
         }
 
         let recorder;
@@ -120,7 +154,7 @@ async function compressVideo(file, maxBytes, onProgress) {
           recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_200_000 });
         } catch {
           clearTimeout(safetyTimeout);
-          return cleanupAndFallback();
+          return finish(needsTrim ? null : file);
         }
 
         const chunks = [];
@@ -138,40 +172,57 @@ async function compressVideo(file, maxBytes, onProgress) {
         recorder.onstop = () => {
           clearTimeout(safetyTimeout);
           drawing = false;
-          URL.revokeObjectURL(video.src);
           const blob = new Blob(chunks, { type: 'video/webm' });
-          if (blob.size === 0 || blob.size >= file.size) {
-            resolve(file);
-          } else {
-            const base = (file.name || 'video').replace(/\.[^.]+$/, '');
-            resolve(new File([blob], base + '.webm', { type: 'video/webm' }));
+          if (blob.size === 0) {
+            finish(needsTrim ? null : file);
+            return;
           }
+          if (!needsTrim && blob.size >= file.size) {
+            finish(file);
+            return;
+          }
+          const base = (file.name || 'video').replace(/\.[^.]+$/, '');
+          finish(new File([blob], base + '.webm', { type: 'video/webm' }));
         };
 
         video.onended = () => {
           if (recorder.state !== 'inactive') recorder.stop();
         };
         video.ontimeupdate = () => {
-          if (onProgress && video.duration) {
-            onProgress(Math.min(99, Math.round((video.currentTime / video.duration) * 100)));
+          if (onProgress) {
+            const denom = needsTrim ? targetDuration : video.duration;
+            const elapsed = needsTrim ? video.currentTime - start : video.currentTime;
+            if (denom) onProgress(Math.min(99, Math.max(0, Math.round((elapsed / denom) * 100))));
+          }
+          if (needsTrim && video.currentTime >= start + targetDuration) {
+            if (recorder.state !== 'inactive') recorder.stop();
           }
         };
 
-        recorder.start();
-        drawFrame();
-        video.play().catch(() => {
-          clearTimeout(safetyTimeout);
-          if (recorder.state !== 'inactive') recorder.stop();
-          cleanupAndFallback();
-        });
+        const startRecording = () => {
+          recorder.start();
+          drawFrame();
+          video.play().catch(() => {
+            clearTimeout(safetyTimeout);
+            if (recorder.state !== 'inactive') recorder.stop();
+            finish(needsTrim ? null : file);
+          });
+        };
+
+        if (start > 0) {
+          video.onseeked = () => startRecording();
+          video.currentTime = start;
+        } else {
+          startRecording();
+        }
       };
 
       video.onerror = () => {
         clearTimeout(safetyTimeout);
-        cleanupAndFallback();
+        finish(needsTrim ? null : file);
       };
     });
   } catch {
-    return file;
+    return needsTrim ? null : file;
   }
 }

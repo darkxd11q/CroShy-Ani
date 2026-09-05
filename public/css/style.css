@@ -752,3 +752,76 @@ footer.site {
   line-height: 1;
 }
 .not-found p { color: var(--text-dim); margin: 16px 0 30px; max-width: 420px; }
+
+/* ---------- Otomatik giriş bildirimi ---------- */
+.auto-login-badge {
+  position: fixed;
+  top: 22px;
+  left: 50%;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(15, 13, 20, 0.94);
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(14px);
+  padding: 11px 20px 11px 12px;
+  border-radius: 999px;
+  box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.65);
+  opacity: 0;
+  transform: translateX(-50%) translateY(-24px);
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(.2, .9, .25, 1);
+  pointer-events: none;
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+.auto-login-badge.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.auto-login-check {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #34d399, #10b981);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.55);
+}
+.auto-login-check svg path {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: autoLoginCheckDraw 0.5s ease forwards 0.15s;
+}
+@keyframes autoLoginCheckDraw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ---------- Video kırpma alanı ---------- */
+.trim-box {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 16px;
+}
+.trim-range-label {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 10px;
+  color: var(--accent-3);
+}
+.trim-range-label .trim-total {
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+}
+.trim-box input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-2);
+  margin-bottom: 8px;
+}
+.trim-field .hint { color: var(--text-dim); font-size: 0.8rem; margin-top: 4px; }

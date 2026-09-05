@@ -72,8 +72,8 @@
     <div class="upload-card">
       <form id="upload-form">
         <div class="field">
-          <label for="caption">Kısa not (opsiyonel)</label>
-          <textarea id="caption" placeholder="Bu anla ilgili birkaç kelime…" maxlength="200"></textarea>
+          <label for="caption">Kısa not <span style="color:var(--accent-2);">*</span></label>
+          <textarea id="caption" placeholder="Bu anla ilgili birkaç kelime… (zorunlu)" maxlength="200" required></textarea>
         </div>
 
         <div class="field">
@@ -82,10 +82,22 @@
             <input type="file" id="fileInput" accept="image/*,video/*" />
             <div class="icon">📤</div>
             <div>Dosyayı sürükle bırak ya da tıkla</div>
-            <div class="hint">JPG, PNG, MP4, MOV… — kısa videolar tercih edilir</div>
+            <div class="hint">JPG, PNG, MP4, MOV… — videolar en fazla 2:30 olabilir</div>
             <div class="filename" id="filename"></div>
           </div>
           <div class="progress-bar" id="progressBar"><span></span></div>
+        </div>
+
+        <div class="field trim-field" id="trimField" style="display:none;">
+          <label>Video 2:30'dan uzun — göndermek istediğin bölümü seç</label>
+          <div class="trim-box">
+            <div class="trim-range-label">
+              <span id="trimStartLabel">0:00</span> – <span id="trimEndLabel">2:30</span>
+              <span class="trim-total">/ <span id="trimTotalLabel">0:00</span></span>
+            </div>
+            <input type="range" id="trimSlider" min="0" max="0" value="0" step="1" />
+            <div class="hint">Kaydırıcıyı hareket ettirerek videonun hangi 2:30'luk kısmının gönderileceğini seçebilirsin.</div>
+          </div>
         </div>
 
         <button type="submit" class="btn primary" id="submitBtn" style="width:100%; justify-content:center;">
@@ -100,6 +112,7 @@
   <footer class="site">CroShy Anı · Gönderdiğin anı, onaylandıktan sonra herkese görünür</footer>
 
   <script src="/js/social-menu.js"></script>
+  <script src="/js/auto-login-badge.js"></script>
   <script src="/js/compress.js"></script>
   <script src="/js/upload.js"></script>
 </body>

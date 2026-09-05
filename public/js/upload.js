@@ -8,14 +8,30 @@ const progressBar = document.getElementById('progressBar');
 const progressSpan = progressBar.querySelector('span');
 const userGreeting = document.getElementById('userGreeting');
 const quotaInfo = document.getElementById('quotaInfo');
+const trimField = document.getElementById('trimField');
+const trimSlider = document.getElementById('trimSlider');
+const trimStartLabel = document.getElementById('trimStartLabel');
+const trimEndLabel = document.getElementById('trimEndLabel');
+const trimTotalLabel = document.getElementById('trimTotalLabel');
 
 let selectedFile = null;
 let config = null;
 let remainingToday = null;
 let sizeLimitExempt = false;
+let videoDuration = null; // saniye, sadece video seçiliyken
+let needsTrim = false;
+
+const MAX_VIDEO_DURATION_SEC = 150; // 2:30 — /api/config ile senkron
 
 function formatMb(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function formatTime(sec) {
+  const s = Math.max(0, Math.round(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
 }
 
 // Giriş kontrolü + kalan günlük hak bilgisi
@@ -33,8 +49,8 @@ fetch('/api/me')
     sizeLimitExempt = !!me.sizeLimitExempt;
 
     const limitNote = sizeLimitExempt
-      ? ' · Dosya boyutu sınırın kaldırılmış ✨'
-      : ` · Foto en fazla ${formatMb(me.maxImageBytes)}, video en fazla ${formatMb(me.maxVideoBytes)}`;
+      ? ' · Dosya boyutu/süre sınırın kaldırılmış ✨'
+      : ` · Foto en fazla ${formatMb(me.maxImageBytes)}, video en fazla ${formatMb(me.maxVideoBytes)} / 2:30`;
 
     if (remainingToday <= 0) {
       quotaInfo.textContent = `Bugünkü gönderme hakkını kullandın (günde en fazla ${me.dailyLimit} anı). Yarın tekrar deneyebilirsin.`;
@@ -46,7 +62,7 @@ fetch('/api/me')
   })
   .catch(() => {});
 
-// Cloudinary config'i (ve boyut limitlerini) backend'den al
+// Cloudinary config'i (ve boyut/süre limitlerini) backend'den al
 fetch('/api/config')
   .then((r) => r.json())
   .then((c) => (config = c))
@@ -75,10 +91,55 @@ fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) handleFile(fileInput.files[0]);
 });
 
-function handleFile(file) {
+async function handleFile(file) {
   selectedFile = file;
+  videoDuration = null;
+  needsTrim = false;
+  trimField.style.display = 'none';
   filenameEl.textContent = `${file.name} (${formatMb(file.size)})`;
+
+  if (!file.type.startsWith('video/')) return;
+
+  const limit = (config && config.maxVideoDurationSec) || MAX_VIDEO_DURATION_SEC;
+
+  try {
+    filenameEl.textContent += ' · süre okunuyor…';
+    const duration = await getVideoDuration(file);
+    videoDuration = duration;
+
+    if (duration == null) {
+      filenameEl.textContent = `${file.name} (${formatMb(file.size)})`;
+      return;
+    }
+
+    filenameEl.textContent = `${file.name} (${formatMb(file.size)}, ${formatTime(duration)})`;
+
+    if (duration > limit + 0.5) {
+      needsTrim = true;
+      const maxStart = Math.max(0, Math.floor(duration - limit));
+      trimSlider.max = String(maxStart);
+      trimSlider.value = '0';
+      trimTotalLabel.textContent = formatTime(duration);
+      updateTrimLabels();
+      trimField.style.display = 'block';
+      showStatus(
+        `Bu video ${formatTime(duration)} uzunluğunda — en fazla 2:30 gönderebilirsin. Aşağıdan hangi bölümü göndermek istediğini seçebilirsin.`,
+        'info'
+      );
+    }
+  } catch {
+    filenameEl.textContent = `${file.name} (${formatMb(file.size)})`;
+  }
 }
+
+function updateTrimLabels() {
+  const start = Number(trimSlider.value);
+  const limit = (config && config.maxVideoDurationSec) || MAX_VIDEO_DURATION_SEC;
+  const end = videoDuration ? Math.min(start + limit, videoDuration) : start + limit;
+  trimStartLabel.textContent = formatTime(start);
+  trimEndLabel.textContent = formatTime(end);
+}
+trimSlider.addEventListener('input', updateTrimLabels);
 
 function showStatus(msg, type) {
   statusMsg.textContent = msg;
@@ -96,6 +157,12 @@ form.addEventListener('submit', async (e) => {
     showStatus('Lütfen bir fotoğraf veya video seç.', 'err');
     return;
   }
+  const captionValue = document.getElementById('caption').value.trim();
+  if (!captionValue) {
+    showStatus('Açıklama yazman zorunlu.', 'err');
+    document.getElementById('caption').focus();
+    return;
+  }
   if (!config || !config.cloudName || !config.uploadPreset) {
     showStatus('Depolama servisi yapılandırılmamış. Sunucu .env dosyasını kontrol et.', 'err');
     return;
@@ -104,18 +171,38 @@ form.addEventListener('submit', async (e) => {
   const isVideo = selectedFile.type.startsWith('video/');
   const resourceType = isVideo ? 'video' : 'image';
   const sizeLimit = isVideo ? config.maxVideoBytes : config.maxImageBytes;
+  const durationLimit = config.maxVideoDurationSec || MAX_VIDEO_DURATION_SEC;
 
   submitBtn.disabled = true;
 
   let fileToUpload = selectedFile;
 
-  if (!sizeLimitExempt) {
+  if (isVideo && needsTrim && !sizeLimitExempt) {
+    submitBtn.textContent = 'Video kırpılıyor…';
+    showStatus('Seçtiğin bölüm hazırlanıyor…', 'info');
+    const trimmed = await compressVideo(selectedFile, sizeLimit, {
+      trimStart: Number(trimSlider.value),
+      trimDuration: durationLimit,
+      onProgress: (pct) => showStatus(`Video hazırlanıyor… %${pct}`, 'info'),
+    });
+
+    if (!trimmed) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Onaya Gönder';
+      showStatus(
+        'Tarayıcın video kırpmayı desteklemiyor. Lütfen videoyu göndermeden önce başka bir uygulamayla 2:30 veya altına kısalt.',
+        'err'
+      );
+      return;
+    }
+    fileToUpload = trimmed;
+  } else if (!sizeLimitExempt) {
     try {
       if (isVideo) {
         submitBtn.textContent = 'Video sıkıştırılıyor…';
         showStatus('Video sıkıştırılıyor, bu biraz sürebilir…', 'info');
-        fileToUpload = await compressVideo(selectedFile, sizeLimit, (pct) => {
-          showStatus(`Video sıkıştırılıyor… %${pct}`, 'info');
+        fileToUpload = await compressVideo(selectedFile, sizeLimit, {
+          onProgress: (pct) => showStatus(`Video sıkıştırılıyor… %${pct}`, 'info'),
         });
       } else {
         submitBtn.textContent = 'Fotoğraf sıkıştırılıyor…';
@@ -166,7 +253,8 @@ form.addEventListener('submit', async (e) => {
         publicId: cloudResult.public_id,
         type: resourceType,
         bytes: cloudResult.bytes,
-        caption: document.getElementById('caption').value,
+        durationSec: cloudResult.duration || null,
+        caption: captionValue,
       }),
     });
 
@@ -182,6 +270,9 @@ form.addEventListener('submit', async (e) => {
     form.reset();
     filenameEl.textContent = '';
     selectedFile = null;
+    videoDuration = null;
+    needsTrim = false;
+    trimField.style.display = 'none';
     progressBar.style.display = 'none';
     progressSpan.style.width = '0%';
 

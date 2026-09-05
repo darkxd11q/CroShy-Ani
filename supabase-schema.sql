@@ -58,6 +58,18 @@ create table if not exists media_views (
   primary key (item_id, ip)
 );
 
+-- "Beni hatırla" / otomatik giriş için uzun ömürlü token'lar.
+-- Ham token asla saklanmaz, sadece sha256 hash'i saklanır.
+create table if not exists remember_tokens (
+  token_hash text primary key,
+  subject_type text not null check (subject_type in ('admin', 'user')),
+  subject_id text not null,
+  username text not null,
+  created_at bigint not null,
+  expires_at bigint not null
+);
+create index if not exists idx_remember_expires on remember_tokens (expires_at);
+
 -- Bu tablolara sadece sunucumuz (service_role anahtarıyla) erişiyor;
 -- service_role zaten Row Level Security'yi atlar, bu yüzden RLS'i
 -- kapalı bırakmak (varsayılan) yeterli ve en basit seçenektir.
