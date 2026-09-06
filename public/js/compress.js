@@ -101,13 +101,38 @@ async function compressVideo(file, maxBytes, opts = {}) {
       video.preload = 'auto';
       video.muted = false;
       video.playsInline = true;
+      // ÖNEMLİ: video/canvas DOM'a eklenmezse bazı tarayıcılar bir süre sonra
+      // (görünmez/arka plan elemanı olduğu için) oynatmayı/rendering'i
+      // yavaşlatıp durdurabiliyor — bu da kaydın ilk birkaç saniyeden sonra
+      // bozuk/donuk çıkmasına sebep oluyordu. Ekranın tamamen dışında ama
+      // DOM'da gerçekten var olan, gizli elemanlar olarak ekliyoruz.
+      Object.assign(video.style, {
+        position: 'fixed',
+        left: '-99999px',
+        top: '0',
+        width: '1px',
+        height: '1px',
+        opacity: '0',
+        pointerEvents: 'none',
+      });
+      video.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(video);
       video.src = URL.createObjectURL(file);
 
+      let canvas = null;
       let settled = false;
+
+      const cleanupDom = () => {
+        video.pause();
+        video.remove();
+        if (canvas) canvas.remove();
+      };
+
       const finish = (result) => {
         if (settled) return;
         settled = true;
         URL.revokeObjectURL(video.src);
+        cleanupDom();
         resolve(result);
       };
 
@@ -130,9 +155,17 @@ async function compressVideo(file, maxBytes, opts = {}) {
 
         const MAX_W = 1280;
         const scale = video.videoWidth > MAX_W ? MAX_W / video.videoWidth : 1;
-        const canvas = document.createElement('canvas');
+        canvas = document.createElement('canvas');
         canvas.width = Math.round(video.videoWidth * scale) || video.videoWidth;
         canvas.height = Math.round(video.videoHeight * scale) || video.videoHeight;
+        Object.assign(canvas.style, {
+          position: 'fixed',
+          left: '-99999px',
+          top: '0',
+          opacity: '0',
+          pointerEvents: 'none',
+        });
+        document.body.appendChild(canvas);
         const ctx = canvas.getContext('2d');
 
         let stream;
@@ -200,7 +233,10 @@ async function compressVideo(file, maxBytes, opts = {}) {
         };
 
         const startRecording = () => {
-          recorder.start();
+          // 1 saniyelik dilimlerle veri iste — bazı tarayıcılarda tek seferde
+          // (stop() anında) tüm veriyi almaya çalışmak, uzunca kayıtlarda
+          // veri kaybına/bozulmaya yol açabiliyor.
+          recorder.start(1000);
           drawFrame();
           video.play().catch(() => {
             clearTimeout(safetyTimeout);

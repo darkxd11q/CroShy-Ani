@@ -54,4 +54,22 @@ async function removeAllForItem(itemId) {
   if (error) throw error;
 }
 
-module.exports = { countLikes, toggleLike, getAllCounts, getLikedSetForIp, removeAllForItem };
+// Belirli bir öğe id listesi için toplam beğeni sayısı (profil istatistikleri için)
+async function countLikesForItemIds(itemIds) {
+  if (!itemIds || itemIds.length === 0) return 0;
+  const { count, error } = await supabase
+    .from('likes')
+    .select('*', { count: 'exact', head: true })
+    .in('item_id', itemIds);
+  if (error) throw error;
+  return count || 0;
+}
+
+module.exports = {
+  countLikes,
+  toggleLike,
+  getAllCounts,
+  getLikedSetForIp,
+  removeAllForItem,
+  countLikesForItemIds,
+};

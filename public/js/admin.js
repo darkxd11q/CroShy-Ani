@@ -44,25 +44,54 @@ document.querySelectorAll('#ban-list [data-action="unban"]').forEach((btn) => {
   btn.addEventListener('click', () => handleUnban(btn.dataset.ip, btn));
 });
 
-// Boyut sınırı muafiyeti — ekleme formu
-const exemptForm = document.getElementById('exempt-form');
-if (exemptForm) {
-  exemptForm.addEventListener('submit', async (e) => {
+// Genel ayarlar formu
+const settingsForm = document.getElementById('settings-form');
+if (settingsForm) {
+  settingsForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const input = document.getElementById('exemptUsername');
-    const statusEl = document.getElementById('exemptStatus');
-    const username = input.value.trim();
+    const statusEl = document.getElementById('settingsStatus');
+    try {
+      await adminFetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dailySubmitLimit: document.getElementById('dailySubmitLimit').value,
+          maxImageMb: document.getElementById('maxImageMb').value,
+          maxVideoMb: document.getElementById('maxVideoMb').value,
+          maxVideoDurationSec: document.getElementById('maxVideoDurationSec').value,
+        }),
+      });
+      statusEl.textContent = 'Genel ayarlar güncellendi.';
+      statusEl.className = 'status-msg show ok';
+    } catch (err) {
+      statusEl.textContent = 'Hata: ' + err.message;
+      statusEl.className = 'status-msg show err';
+    }
+  });
+}
+
+// Kullanıcıya özel limit — ekleme formu
+const userLimitsForm = document.getElementById('user-limits-form');
+if (userLimitsForm) {
+  userLimitsForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const statusEl = document.getElementById('userLimitsStatus');
+    const username = document.getElementById('limitUsername').value.trim();
     if (!username) return;
 
     try {
-      const data = await adminFetch('/api/admin/exempt', {
+      const data = await adminFetch('/api/admin/user-limits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
+        body: JSON.stringify({
+          username,
+          imageMb: document.getElementById('limitImageMb').value,
+          videoMb: document.getElementById('limitVideoMb').value,
+          videoDurationSec: document.getElementById('limitVideoDurationSec').value,
+        }),
       });
-      statusEl.textContent = `"${data.username}" için dosya boyutu sınırı kaldırıldı.`;
+      statusEl.textContent = `"${data.username}" için özel limitler uygulandı.`;
       statusEl.className = 'status-msg show ok';
-      input.value = '';
       setTimeout(() => window.location.reload(), 700);
     } catch (err) {
       statusEl.textContent = 'Hata: ' + err.message;
@@ -71,12 +100,12 @@ if (exemptForm) {
   });
 }
 
-// Boyut sınırı muafiyeti — geri getir butonları
-document.querySelectorAll('#exempt-list [data-action="unexempt"]').forEach((btn) => {
+// Kullanıcıya özel limit — sıfırla butonları
+document.querySelectorAll('#limits-list [data-action="reset-limits"]').forEach((btn) => {
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     try {
-      await adminFetch('/api/admin/unexempt', {
+      await adminFetch('/api/admin/user-limits/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: btn.dataset.username }),

@@ -130,31 +130,88 @@
     </div>
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
-        <h2 style="margin:0;">Dosya Boyutu Sınırı Muafiyeti</h2>
-        <div class="admin-stat">Bir kullanıcı adı girerek o hesabın foto/video boyut sınırını kaldırabilirsin</div>
+        <h2 style="margin:0;">Genel Ayarlar</h2>
+        <div class="admin-stat">Kullanıcıya özel bir limit yoksa herkes için geçerli olan varsayılan değerler</div>
+      </div>
+    </div>
+
+    <div class="upload-card" style="margin-bottom: 20px;">
+      <form id="settings-form" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; align-items:end;">
+        <div class="field" style="margin:0;">
+          <label for="dailySubmitLimit">Günlük gönderim limiti (adet)</label>
+          <input type="number" id="dailySubmitLimit" min="1" step="1" value="<%= settings.dailySubmitLimit %>"
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <div class="field" style="margin:0;">
+          <label for="maxImageMb">Varsayılan fotoğraf sınırı (MB)</label>
+          <input type="number" id="maxImageMb" min="0.1" step="0.1" value="<%= (settings.maxImageBytes / (1024*1024)).toFixed(1) %>"
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <div class="field" style="margin:0;">
+          <label for="maxVideoMb">Varsayılan video sınırı (MB)</label>
+          <input type="number" id="maxVideoMb" min="0.1" step="0.1" value="<%= (settings.maxVideoBytes / (1024*1024)).toFixed(1) %>"
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <div class="field" style="margin:0;">
+          <label for="maxVideoDurationSec">Varsayılan video süresi (saniye)</label>
+          <input type="number" id="maxVideoDurationSec" min="1" step="1" value="<%= settings.maxVideoDurationSec %>"
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <button type="submit" class="btn primary" style="height:44px;">Kaydet</button>
+      </form>
+      <div class="status-msg" id="settingsStatus"></div>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
+        <h2 style="margin:0;">Kullanıcıya Özel Limitler</h2>
+        <div class="admin-stat">Bir kullanıcı adı gir, istediğin alanları doldur — boş bıraktığın alan genel ayara döner</div>
       </div>
     </div>
 
     <div class="upload-card" style="margin-bottom: 8px;">
-      <form id="exempt-form" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-        <input type="text" id="exemptUsername" placeholder="Kullanıcı adı" maxlength="10"
-               style="flex:1; min-width:160px; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
-        <button type="submit" class="btn primary small">Sınırı Kaldır</button>
+      <form id="user-limits-form" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items:end;">
+        <div class="field" style="margin:0;">
+          <label for="limitUsername">Kullanıcı adı</label>
+          <input type="text" id="limitUsername" placeholder="Kullanıcı adı" maxlength="10" required
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <div class="field" style="margin:0;">
+          <label for="limitImageMb">Fotoğraf sınırı (MB)</label>
+          <input type="number" id="limitImageMb" min="0.1" step="0.1" placeholder="boş = varsayılan"
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <div class="field" style="margin:0;">
+          <label for="limitVideoMb">Video sınırı (MB)</label>
+          <input type="number" id="limitVideoMb" min="0.1" step="0.1" placeholder="boş = varsayılan"
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <div class="field" style="margin:0;">
+          <label for="limitVideoDurationSec">Video süresi (saniye)</label>
+          <input type="number" id="limitVideoDurationSec" min="1" step="1" placeholder="boş = varsayılan"
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <button type="submit" class="btn primary" style="height:44px;">Uygula</button>
       </form>
-      <div class="status-msg" id="exemptStatus"></div>
+      <div class="status-msg" id="userLimitsStatus"></div>
     </div>
 
-    <div class="pending-list" id="exempt-list">
-      <% if (exemptUsers.length === 0) { %>
-        <div class="empty-state">Şu an sınırı kaldırılmış bir kullanıcı yok</div>
+    <div class="pending-list" id="limits-list">
+      <% if (customLimitUsers.length === 0) { %>
+        <div class="empty-state">Şu an özel limiti olan bir kullanıcı yok</div>
       <% } %>
-      <% exemptUsers.forEach(function(u) { %>
+      <% customLimitUsers.forEach(function(u) { %>
         <div class="pending-item" data-username-row="<%= u.username %>" style="align-items:center;">
           <div class="info">
-            <div class="name"><%= u.username %> <span style="color:var(--text-dim); font-weight:400;">— sınırsız yükleme</span></div>
+            <div class="name"><%= u.username %></div>
+            <div class="date">
+              <% if (u.customImageBytes) { %>📷 <%= (u.customImageBytes/(1024*1024)).toFixed(1) %>MB &nbsp;<% } %>
+              <% if (u.customVideoBytes) { %>🎬 <%= (u.customVideoBytes/(1024*1024)).toFixed(1) %>MB &nbsp;<% } %>
+              <% if (u.customVideoDurationSec) { %>⏱️ <%= u.customVideoDurationSec %>sn<% } %>
+            </div>
           </div>
           <div class="actions">
-            <button class="btn danger small" data-action="unexempt" data-username="<%= u.username %>">Sınırı Geri Getir</button>
+            <button class="btn danger small" data-action="reset-limits" data-username="<%= u.username %>">Sıfırla</button>
           </div>
         </div>
       <% }) %>

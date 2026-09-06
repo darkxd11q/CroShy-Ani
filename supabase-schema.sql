@@ -70,6 +70,26 @@ create table if not exists remember_tokens (
 );
 create index if not exists idx_remember_expires on remember_tokens (expires_at);
 
+-- Kullanıcıya özel dosya boyutu/süre sınırları (boşsa genel ayarlar geçerli olur)
+alter table app_users add column if not exists custom_image_bytes bigint;
+alter table app_users add column if not exists custom_video_bytes bigint;
+alter table app_users add column if not exists custom_video_duration_sec int;
+
+-- Genel (site geneli) varsayılan ayarlar — tek satırlık basit bir ayar tablosu.
+-- Admin panelinden değiştirilebilir; kullanıcıya özel sınır yoksa buradaki
+-- değerler kullanılır.
+create table if not exists app_settings (
+  id int primary key default 1,
+  daily_submit_limit int not null default 2,
+  max_image_bytes bigint not null default 8912896,
+  max_video_bytes bigint not null default 41943040,
+  max_video_duration_sec int not null default 150,
+  updated_at bigint not null default 0
+);
+insert into app_settings (id, daily_submit_limit, max_image_bytes, max_video_bytes, max_video_duration_sec, updated_at)
+values (1, 2, 8912896, 41943040, 150, 0)
+on conflict (id) do nothing;
+
 -- Bu tablolara sadece sunucumuz (service_role anahtarıyla) erişiyor;
 -- service_role zaten Row Level Security'yi atlar, bu yüzden RLS'i
 -- kapalı bırakmak (varsayılan) yeterli ve en basit seçenektir.

@@ -1,6 +1,7 @@
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const filenameEl = document.getElementById('filename');
+const fileHint = document.getElementById('fileHint');
 const form = document.getElementById('upload-form');
 const submitBtn = document.getElementById('submitBtn');
 const statusMsg = document.getElementById('statusMsg');
@@ -9,19 +10,19 @@ const progressSpan = progressBar.querySelector('span');
 const userGreeting = document.getElementById('userGreeting');
 const quotaInfo = document.getElementById('quotaInfo');
 const trimField = document.getElementById('trimField');
-const trimSlider = document.getElementById('trimSlider');
+const trimStartSlider = document.getElementById('trimStartSlider');
+const trimLengthSlider = document.getElementById('trimLengthSlider');
 const trimStartLabel = document.getElementById('trimStartLabel');
 const trimEndLabel = document.getElementById('trimEndLabel');
 const trimTotalLabel = document.getElementById('trimTotalLabel');
+const trimMaxLenLabel = document.getElementById('trimMaxLenLabel');
 
 let selectedFile = null;
 let config = null;
 let remainingToday = null;
-let sizeLimitExempt = false;
+let myLimits = null; // /api/me üzerinden gelen fiili (kişiye özel ya da genel) sınırlar
 let videoDuration = null; // saniye, sadece video seçiliyken
 let needsTrim = false;
-
-const MAX_VIDEO_DURATION_SEC = 150; // 2:30 — /api/config ile senkron
 
 function formatMb(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
@@ -34,7 +35,7 @@ function formatTime(sec) {
   return `${m}:${String(r).padStart(2, '0')}`;
 }
 
-// Giriş kontrolü + kalan günlük hak bilgisi
+// Giriş kontrolü + kalan günlük hak bilgisi + fiili sınırlar
 fetch('/api/me')
   .then((r) => {
     if (r.status === 401) {
@@ -46,11 +47,11 @@ fetch('/api/me')
   .then((me) => {
     userGreeting.textContent = `Merhaba, ${me.username}`;
     remainingToday = me.remainingToday;
-    sizeLimitExempt = !!me.sizeLimitExempt;
+    myLimits = me;
 
-    const limitNote = sizeLimitExempt
-      ? ' · Dosya boyutu/süre sınırın kaldırılmış ✨'
-      : ` · Foto en fazla ${formatMb(me.maxImageBytes)}, video en fazla ${formatMb(me.maxVideoBytes)} / 2:30`;
+    fileHint.textContent = `JPG, PNG, MP4, MOV… — foto en fazla ${formatMb(me.maxImageBytes)}, video en fazla ${formatMb(me.maxVideoBytes)} / ${formatTime(me.maxVideoDurationSec)}`;
+
+    const limitNote = me.hasCustomLimits ? ' · Senin için özel sınırlar tanımlı ✨' : '';
 
     if (remainingToday <= 0) {
       quotaInfo.textContent = `Bugünkü gönderme hakkını kullandın (günde en fazla ${me.dailyLimit} anı). Yarın tekrar deneyebilirsin.`;
@@ -62,7 +63,7 @@ fetch('/api/me')
   })
   .catch(() => {});
 
-// Cloudinary config'i (ve boyut/süre limitlerini) backend'den al
+// Cloudinary config'i backend'den al
 fetch('/api/config')
   .then((r) => r.json())
   .then((c) => (config = c))
@@ -100,7 +101,7 @@ async function handleFile(file) {
 
   if (!file.type.startsWith('video/')) return;
 
-  const limit = (config && config.maxVideoDurationSec) || MAX_VIDEO_DURATION_SEC;
+  const limit = myLimits ? myLimits.maxVideoDurationSec : 150;
 
   try {
     filenameEl.textContent += ' · süre okunuyor…';
@@ -116,14 +117,10 @@ async function handleFile(file) {
 
     if (duration > limit + 0.5) {
       needsTrim = true;
-      const maxStart = Math.max(0, Math.floor(duration - limit));
-      trimSlider.max = String(maxStart);
-      trimSlider.value = '0';
-      trimTotalLabel.textContent = formatTime(duration);
-      updateTrimLabels();
+      setupTrimUI(duration, limit);
       trimField.style.display = 'block';
       showStatus(
-        `Bu video ${formatTime(duration)} uzunluğunda — en fazla 2:30 gönderebilirsin. Aşağıdan hangi bölümü göndermek istediğini seçebilirsin.`,
+        `Bu video ${formatTime(duration)} uzunluğunda — en fazla ${formatTime(limit)} gönderebilirsin. Aşağıdan başlangıcı ve uzunluğu seçebilirsin.`,
         'info'
       );
     }
@@ -132,14 +129,43 @@ async function handleFile(file) {
   }
 }
 
-function updateTrimLabels() {
-  const start = Number(trimSlider.value);
-  const limit = (config && config.maxVideoDurationSec) || MAX_VIDEO_DURATION_SEC;
-  const end = videoDuration ? Math.min(start + limit, videoDuration) : start + limit;
-  trimStartLabel.textContent = formatTime(start);
-  trimEndLabel.textContent = formatTime(end);
+function setupTrimUI(duration, limit) {
+  trimMaxLenLabel.textContent = formatTime(limit);
+  trimTotalLabel.textContent = formatTime(duration);
+
+  trimStartSlider.min = '0';
+  trimStartSlider.max = String(Math.max(0, Math.floor(duration - 1)));
+  trimStartSlider.value = '0';
+
+  updateLengthSliderBounds();
+  trimLengthSlider.value = trimLengthSlider.max;
+
+  updateTrimLabels();
 }
-trimSlider.addEventListener('input', updateTrimLabels);
+
+function updateLengthSliderBounds() {
+  const limit = myLimits ? myLimits.maxVideoDurationSec : 150;
+  const start = Number(trimStartSlider.value);
+  const remaining = Math.max(1, Math.floor(videoDuration - start));
+  const maxLen = Math.max(1, Math.min(limit, remaining));
+  trimLengthSlider.max = String(maxLen);
+  if (Number(trimLengthSlider.value) > maxLen || !trimLengthSlider.value) {
+    trimLengthSlider.value = String(maxLen);
+  }
+}
+
+function updateTrimLabels() {
+  const start = Number(trimStartSlider.value);
+  const length = Number(trimLengthSlider.value);
+  trimStartLabel.textContent = formatTime(start);
+  trimEndLabel.textContent = formatTime(start + length);
+}
+
+trimStartSlider.addEventListener('input', () => {
+  updateLengthSliderBounds();
+  updateTrimLabels();
+});
+trimLengthSlider.addEventListener('input', updateTrimLabels);
 
 function showStatus(msg, type) {
   statusMsg.textContent = msg;
@@ -170,19 +196,19 @@ form.addEventListener('submit', async (e) => {
 
   const isVideo = selectedFile.type.startsWith('video/');
   const resourceType = isVideo ? 'video' : 'image';
-  const sizeLimit = isVideo ? config.maxVideoBytes : config.maxImageBytes;
-  const durationLimit = config.maxVideoDurationSec || MAX_VIDEO_DURATION_SEC;
+  const sizeLimit = myLimits ? (isVideo ? myLimits.maxVideoBytes : myLimits.maxImageBytes) : (isVideo ? config.maxVideoBytes : config.maxImageBytes);
+  const durationLimit = myLimits ? myLimits.maxVideoDurationSec : config.maxVideoDurationSec;
 
   submitBtn.disabled = true;
 
   let fileToUpload = selectedFile;
 
-  if (isVideo && needsTrim && !sizeLimitExempt) {
+  if (isVideo && needsTrim) {
     submitBtn.textContent = 'Video kırpılıyor…';
     showStatus('Seçtiğin bölüm hazırlanıyor…', 'info');
     const trimmed = await compressVideo(selectedFile, sizeLimit, {
-      trimStart: Number(trimSlider.value),
-      trimDuration: durationLimit,
+      trimStart: Number(trimStartSlider.value),
+      trimDuration: Number(trimLengthSlider.value),
       onProgress: (pct) => showStatus(`Video hazırlanıyor… %${pct}`, 'info'),
     });
 
@@ -190,13 +216,13 @@ form.addEventListener('submit', async (e) => {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Onaya Gönder';
       showStatus(
-        'Tarayıcın video kırpmayı desteklemiyor. Lütfen videoyu göndermeden önce başka bir uygulamayla 2:30 veya altına kısalt.',
+        'Tarayıcın video kırpmayı desteklemiyor. Lütfen videoyu göndermeden önce başka bir uygulamayla kısalt.',
         'err'
       );
       return;
     }
     fileToUpload = trimmed;
-  } else if (!sizeLimitExempt) {
+  } else {
     try {
       if (isVideo) {
         submitBtn.textContent = 'Video sıkıştırılıyor…';

@@ -14,6 +14,7 @@ const logs = require('./logs');
 const likes = require('./likes');
 const viewsStore = require('./views_store');
 const rememberTokens = require('./rememberTokens');
+const settings = require('./settings');
 const {
   safeStringEqual,
   verifyPassword,
@@ -31,10 +32,11 @@ cloudinary.config({
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
-const DAILY_SUBMIT_LIMIT = 2;
-const MAX_IMAGE_BYTES = 8.5 * 1024 * 1024; // 8.5 MB
-const MAX_VIDEO_BYTES = 40 * 1024 * 1024; // 40 MB
-const MAX_VIDEO_DURATION_SEC = 150; // 2 dakika 30 saniye
+// NOT: Sabit limit değerleri kaldırıldı — artık hepsi admin panelinden
+// değiştirilebilen "app_settings" tablosunda (bkz. settings.js) ve
+// kullanıcıya özel override'lar "app_users" tablosunda tutuluyor.
+// Supabase'e ulaşılamazsa (yapılandırılmamışsa) diye makul varsayılanlar:
+const FALLBACK_SETTINGS = settings.DEFAULTS;
 
 // "trust proxy" SADECE üretimde (Render'ın tek katmanlı ters proxy'si arkasında)
 // açık olmalı. Yerelde (npm start ile doğrudan çalıştırırken) bunu açık
@@ -78,6 +80,13 @@ const REMEMBER_MS = 90 * 24 * 60 * 60 * 1000; // 90 gün
 
 function sha256(str) {
   return crypto.createHash('sha256').update(String(str)).digest('hex');
+}
+
+function formatDuration(totalSec) {
+  const s = Math.max(0, Math.round(totalSec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return r === 0 ? `${m} dakika` : `${m}:${String(r).padStart(2, '0')}`;
 }
 
 function getCookie(req, name) {
@@ -209,6 +218,26 @@ function asyncRoute(handler) {
   };
 }
 
+async function getSettingsSafe() {
+  try {
+    return await settings.getSettings();
+  } catch (e) {
+    console.error('Ayarlar okunamadı, varsayılanlar kullanılıyor:', e.message);
+    return FALLBACK_SETTINGS;
+  }
+}
+
+// Bir kullanıcı için geçerli olan (kişiye özelse onu, yoksa genel ayarı
+// kullanan) fiili sınırları hesaplar.
+function effectiveLimitsFor(user, globalSettings) {
+  return {
+    imageBytes: (user && user.customImageBytes) || globalSettings.maxImageBytes,
+    videoBytes: (user && user.customVideoBytes) || globalSettings.maxVideoBytes,
+    videoDurationSec: (user && user.customVideoDurationSec) || globalSettings.maxVideoDurationSec,
+    dailyLimit: globalSettings.dailySubmitLimit,
+  };
+}
+
 // ---------- Yardımcı middleware'ler ----------
 
 function requireAdminPage(req, res, next) {
@@ -236,15 +265,19 @@ function requireUserApi(req, res, next) {
 
 // ---------- Herkese açık API ----------
 
-app.get('/api/config', (req, res) => {
-  res.json({
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
-    uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET || '',
-    maxImageBytes: MAX_IMAGE_BYTES,
-    maxVideoBytes: MAX_VIDEO_BYTES,
-    maxVideoDurationSec: MAX_VIDEO_DURATION_SEC,
-  });
-});
+app.get(
+  '/api/config',
+  asyncRoute(async (req, res) => {
+    const s = await getSettingsSafe();
+    res.json({
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+      uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET || '',
+      maxImageBytes: s.maxImageBytes,
+      maxVideoBytes: s.maxVideoBytes,
+      maxVideoDurationSec: s.maxVideoDurationSec,
+    });
+  })
+);
 
 app.get(
   '/api/approved',
@@ -306,20 +339,29 @@ app.post(
   })
 );
 
-// Giriş yapmış kullanıcının kendi bilgisi + günlük kalan hakkı
+// Giriş yapmış kullanıcının kendi bilgisi + günlük kalan hakkı + fiili sınırları
 app.get(
   '/api/me',
   requireUserApi,
   asyncRoute(async (req, res) => {
-    const [used, user] = await Promise.all([logs.countToday(req.ip), users.findUserById(req.session.userId)]);
+    const [used, user, globalSettings] = await Promise.all([
+      logs.countToday(req.ip),
+      users.findUserById(req.session.userId),
+      getSettingsSafe(),
+    ]);
+    const limits = effectiveLimitsFor(user, globalSettings);
     res.json({
       username: req.session.username,
-      dailyLimit: DAILY_SUBMIT_LIMIT,
+      dailyLimit: limits.dailyLimit,
       usedToday: used,
-      remainingToday: Math.max(0, DAILY_SUBMIT_LIMIT - used),
-      sizeLimitExempt: !!(user && user.sizeLimitExempt),
-      maxImageBytes: MAX_IMAGE_BYTES,
-      maxVideoBytes: MAX_VIDEO_BYTES,
+      remainingToday: Math.max(0, limits.dailyLimit - used),
+      maxImageBytes: limits.imageBytes,
+      maxVideoBytes: limits.videoBytes,
+      maxVideoDurationSec: limits.videoDurationSec,
+      hasCustomLimits: !!(
+        user &&
+        (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)
+      ),
     });
   })
 );
@@ -334,10 +376,16 @@ app.post(
       return res.status(403).json({ error: 'Bu IP adresinin anı gönderme yetkisi kaldırılmış.' });
     }
 
+    const [uploader, globalSettings] = await Promise.all([
+      users.findUserById(req.session.userId),
+      getSettingsSafe(),
+    ]);
+    const limits = effectiveLimitsFor(uploader, globalSettings);
+
     const usedToday = await logs.countToday(ip);
-    if (usedToday >= DAILY_SUBMIT_LIMIT) {
+    if (usedToday >= limits.dailyLimit) {
       return res.status(429).json({
-        error: `Bugün için gönderme hakkını doldurdun (günde en fazla ${DAILY_SUBMIT_LIMIT} anı). Yarın tekrar deneyebilirsin.`,
+        error: `Bugün için gönderme hakkını doldurdun (günde en fazla ${limits.dailyLimit} anı). Yarın tekrar deneyebilirsin.`,
       });
     }
 
@@ -364,14 +412,13 @@ app.post(
       return res.status(400).json({ error: 'Açıklama yazman zorunlu.' });
     }
 
-    // Dosya boyutu sınırı — admin panelinden muaf tutulan kullanıcılar hariç.
-    // "bytes" Cloudinary'nin yükleme sonrası döndürdüğü gerçek dosya boyutudur;
-    // client tarafındaki sıkıştırma/kontroller atlatılsa bile burada yakalanır.
-    const uploader = await users.findUserById(req.session.userId);
-    const isExempt = !!(uploader && uploader.sizeLimitExempt);
-    const sizeLimit = type === 'video' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    // Dosya boyutu sınırı — kullanıcıya özel bir değer varsa o, yoksa genel
+    // ayar geçerlidir. "bytes" Cloudinary'nin yükleme sonrası döndürdüğü
+    // gerçek dosya boyutudur; client tarafındaki sıkıştırma/kontroller
+    // atlatılsa bile burada yakalanır.
+    const sizeLimit = type === 'video' ? limits.videoBytes : limits.imageBytes;
 
-    if (!isExempt && typeof bytes === 'number' && bytes > sizeLimit) {
+    if (typeof bytes === 'number' && bytes > sizeLimit) {
       try {
         await cloudinary.uploader.destroy(publicId, { resource_type: type });
       } catch (e) {
@@ -383,16 +430,18 @@ app.post(
       });
     }
 
-    // Video süresi sınırı — 2:30 (client tarafında kırpma denenir, ama
-    // Cloudinary'nin döndürdüğü gerçek süre burada son kez doğrulanır).
-    if (!isExempt && type === 'video' && typeof durationSec === 'number' && durationSec > MAX_VIDEO_DURATION_SEC + 2) {
+    // Video süresi sınırı — kullanıcıya özel bir değer varsa o, yoksa genel
+    // ayar geçerlidir. Client tarafında kırpma denenir, ama Cloudinary'nin
+    // döndürdüğü gerçek süre burada son kez doğrulanır.
+    if (type === 'video' && typeof durationSec === 'number' && durationSec > limits.videoDurationSec + 2) {
       try {
         await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
       } catch (e) {
         console.error('Cloudinary silme hatası (süre aşımı):', e.message);
       }
+      const limitLabel = formatDuration(limits.videoDurationSec);
       return res.status(413).json({
-        error: `Video çok uzun (${Math.round(durationSec)} sn). Videolar en fazla 2 dakika 30 saniye olabilir.`,
+        error: `Video çok uzun (${Math.round(durationSec)} sn). Videolar en fazla ${limitLabel} olabilir.`,
       });
     }
 
@@ -610,11 +659,12 @@ app.get(
   '/admin',
   requireAdminPage,
   asyncRoute(async (req, res) => {
-    const [pending, approvedCount, banList, exemptUsers] = await Promise.all([
+    const [pending, approvedCount, banList, customLimitUsers, globalSettings] = await Promise.all([
       db.getPendingItems(),
       db.getApprovedCount(),
       bans.listBans(),
-      users.listExemptUsers(),
+      users.listUsersWithCustomLimits(),
+      getSettingsSafe(),
     ]);
 
     res.render('admin', {
@@ -622,35 +672,89 @@ app.get(
       approvedCount,
       username: req.session.username || 'admin',
       bans: banList,
-      exemptUsers,
+      customLimitUsers,
+      settings: globalSettings,
     });
   })
 );
 
-// Bir kullanıcının dosya boyutu sınırını admin panelinden kaldır / geri getir
+// Site geneli varsayılan ayarları güncelle (günlük limit, boyut/süre sınırları)
 app.post(
-  '/api/admin/exempt',
+  '/api/admin/settings',
   requireAdminApi,
   asyncRoute(async (req, res) => {
-    const { username } = req.body;
+    const { dailySubmitLimit, maxImageMb, maxVideoMb, maxVideoDurationSec } = req.body;
+
+    const patch = {};
+    if (dailySubmitLimit !== undefined && dailySubmitLimit !== '') {
+      const n = Number(dailySubmitLimit);
+      if (!Number.isFinite(n) || n < 1) return res.status(400).json({ error: 'Geçersiz günlük limit.' });
+      patch.dailySubmitLimit = Math.round(n);
+    }
+    if (maxImageMb !== undefined && maxImageMb !== '') {
+      const n = Number(maxImageMb);
+      if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'Geçersiz fotoğraf sınırı.' });
+      patch.maxImageBytes = Math.round(n * 1024 * 1024);
+    }
+    if (maxVideoMb !== undefined && maxVideoMb !== '') {
+      const n = Number(maxVideoMb);
+      if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'Geçersiz video sınırı.' });
+      patch.maxVideoBytes = Math.round(n * 1024 * 1024);
+    }
+    if (maxVideoDurationSec !== undefined && maxVideoDurationSec !== '') {
+      const n = Number(maxVideoDurationSec);
+      if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'Geçersiz video süresi.' });
+      patch.maxVideoDurationSec = Math.round(n);
+    }
+
+    const updated = await settings.updateSettings(patch);
+    res.json({ ok: true, settings: updated });
+  })
+);
+
+// Belirli bir kullanıcı için özel dosya boyutu/süre sınırları belirle.
+// Bir alan boş bırakılırsa o alan genel ayara döner (null yapılır).
+app.post(
+  '/api/admin/user-limits',
+  requireAdminApi,
+  asyncRoute(async (req, res) => {
+    const { username, imageMb, videoMb, videoDurationSec } = req.body;
     if (!username || !username.trim()) {
       return res.status(400).json({ error: 'Kullanıcı adı gerekli.' });
     }
-    const user = await users.setSizeLimitExempt(username.trim(), true);
+
+    const imageBytes = imageMb !== undefined && imageMb !== '' && imageMb !== null ? Math.round(Number(imageMb) * 1024 * 1024) : null;
+    const videoBytes = videoMb !== undefined && videoMb !== '' && videoMb !== null ? Math.round(Number(videoMb) * 1024 * 1024) : null;
+    const durationSec =
+      videoDurationSec !== undefined && videoDurationSec !== '' && videoDurationSec !== null
+        ? Math.round(Number(videoDurationSec))
+        : null;
+
+    if (imageBytes !== null && (!Number.isFinite(imageBytes) || imageBytes <= 0)) {
+      return res.status(400).json({ error: 'Geçersiz fotoğraf sınırı.' });
+    }
+    if (videoBytes !== null && (!Number.isFinite(videoBytes) || videoBytes <= 0)) {
+      return res.status(400).json({ error: 'Geçersiz video sınırı.' });
+    }
+    if (durationSec !== null && (!Number.isFinite(durationSec) || durationSec <= 0)) {
+      return res.status(400).json({ error: 'Geçersiz video süresi.' });
+    }
+
+    const user = await users.setCustomLimits(username.trim(), { imageBytes, videoBytes, videoDurationSec: durationSec });
     if (!user) return res.status(404).json({ error: 'Bu kullanıcı adında bir hesap bulunamadı.' });
     res.json({ ok: true, username: user.username });
   })
 );
 
 app.post(
-  '/api/admin/unexempt',
+  '/api/admin/user-limits/reset',
   requireAdminApi,
   asyncRoute(async (req, res) => {
     const { username } = req.body;
     if (!username || !username.trim()) {
       return res.status(400).json({ error: 'Kullanıcı adı gerekli.' });
     }
-    const user = await users.setSizeLimitExempt(username.trim(), false);
+    const user = await users.clearCustomLimits(username.trim());
     if (!user) return res.status(404).json({ error: 'Bu kullanıcı adında bir hesap bulunamadı.' });
     res.json({ ok: true, username: user.username });
   })
@@ -738,6 +842,83 @@ app.get('/', (req, res) => {
 app.get('/upload', requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, 'protected', 'upload.html'));
 });
+
+app.get(
+  '/profile',
+  requireUserPage,
+  asyncRoute(async (req, res) => {
+    const [user, myItems, globalSettings] = await Promise.all([
+      users.findUserById(req.session.userId),
+      db.getItemsByUserId(req.session.userId),
+      getSettingsSafe(),
+    ]);
+
+    const approvedItems = myItems.filter((i) => i.status === 'approved');
+    const pendingCount = myItems.filter((i) => i.status === 'pending').length;
+    const totalLikes = await likes.countLikesForItemIds(approvedItems.map((i) => i.id));
+    const limits = effectiveLimitsFor(user, globalSettings);
+
+    res.render('profile', {
+      username: req.session.username,
+      createdAt: user ? user.createdAt : null,
+      totalCount: myItems.length,
+      approvedCount: approvedItems.length,
+      pendingCount,
+      totalLikes,
+      limits,
+      hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
+      error: null,
+      success: null,
+    });
+  })
+);
+
+app.post(
+  '/profile/change-password',
+  requireUserPage,
+  asyncRoute(async (req, res) => {
+    const { currentPassword, newPassword, confirmNewPassword } = req.body;
+
+    const renderWith = async (error, success) => {
+      const [user, myItems, globalSettings] = await Promise.all([
+        users.findUserById(req.session.userId),
+        db.getItemsByUserId(req.session.userId),
+        getSettingsSafe(),
+      ]);
+      const approvedItems = myItems.filter((i) => i.status === 'approved');
+      const pendingCount = myItems.filter((i) => i.status === 'pending').length;
+      const totalLikes = await likes.countLikesForItemIds(approvedItems.map((i) => i.id));
+      const limits = effectiveLimitsFor(user, globalSettings);
+
+      res.render('profile', {
+        username: req.session.username,
+        createdAt: user ? user.createdAt : null,
+        totalCount: myItems.length,
+        approvedCount: approvedItems.length,
+        pendingCount,
+        totalLikes,
+        limits,
+        hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
+        error,
+        success,
+      });
+    };
+
+    const user = await users.findUserById(req.session.userId);
+    if (!user || !verifyHashedPassword(currentPassword, user.passwordHash)) {
+      return renderWith('Mevcut şifren yanlış.', null);
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return renderWith('Yeni şifre en az 6 karakter olmalı.', null);
+    }
+    if (newPassword !== confirmNewPassword) {
+      return renderWith('Yeni şifreler eşleşmiyor.', null);
+    }
+
+    await users.updatePasswordHash(user.id, hashPassword(newPassword));
+    renderWith(null, 'Şifren başarıyla güncellendi.');
+  })
+);
 
 // 404 - her zaman en sonda
 app.use((req, res) => {

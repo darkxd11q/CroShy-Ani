@@ -82,12 +82,23 @@ async function deleteItem(id) {
   if (error) throw error;
 }
 
+async function getItemsByUserId(userId) {
+  const { data, error } = await supabase
+    .from('items')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(fromRow);
+}
+
 module.exports = {
   getPendingItems,
   getApprovedItems,
   getApprovedCount,
   getItemById,
   getPendingItemsByIp,
+  getItemsByUserId,
   insertItem,
   approveItem,
   deleteItem,

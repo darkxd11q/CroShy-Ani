@@ -54,6 +54,7 @@
         </div>
       </div>
       <span id="userGreeting" class="admin-stat" style="margin-right:2px;"></span>
+      <a href="/profile" class="btn small">Profilim</a>
       <form method="POST" action="/logout" style="margin:0;">
         <button type="submit" class="btn small">Çıkış Yap</button>
       </form>
@@ -82,21 +83,33 @@
             <input type="file" id="fileInput" accept="image/*,video/*" />
             <div class="icon">📤</div>
             <div>Dosyayı sürükle bırak ya da tıkla</div>
-            <div class="hint">JPG, PNG, MP4, MOV… — videolar en fazla 2:30 olabilir</div>
+            <div class="hint" id="fileHint">JPG, PNG, MP4, MOV…</div>
             <div class="filename" id="filename"></div>
           </div>
           <div class="progress-bar" id="progressBar"><span></span></div>
         </div>
 
         <div class="field trim-field" id="trimField" style="display:none;">
-          <label>Video 2:30'dan uzun — göndermek istediğin bölümü seç</label>
+          <label>Video çok uzun — göndermek istediğin bölümü seç</label>
           <div class="trim-box">
             <div class="trim-range-label">
-              <span id="trimStartLabel">0:00</span> – <span id="trimEndLabel">2:30</span>
+              <span id="trimStartLabel">0:00</span> – <span id="trimEndLabel">0:00</span>
               <span class="trim-total">/ <span id="trimTotalLabel">0:00</span></span>
             </div>
-            <input type="range" id="trimSlider" min="0" max="0" value="0" step="1" />
-            <div class="hint">Kaydırıcıyı hareket ettirerek videonun hangi 2:30'luk kısmının gönderileceğini seçebilirsin.</div>
+
+            <div style="margin-bottom: 14px;">
+              <label style="font-size:0.78rem; color:var(--text-dim); display:block; margin-bottom:6px;">Başlangıç noktası</label>
+              <input type="range" id="trimStartSlider" min="0" max="0" value="0" step="1" />
+            </div>
+
+            <div>
+              <label style="font-size:0.78rem; color:var(--text-dim); display:block; margin-bottom:6px;">
+                Uzunluk (en fazla <span id="trimMaxLenLabel">2:30</span>)
+              </label>
+              <input type="range" id="trimLengthSlider" min="1" max="1" value="1" step="1" />
+            </div>
+
+            <div class="hint">Başlangıç noktasını ve uzunluğu istediğin gibi ayarlayabilirsin (örn. 23 saniye, 1 dakika, 2 dakika…).</div>
           </div>
         </div>
 
