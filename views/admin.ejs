@@ -63,7 +63,11 @@
     <div class="admin-topbar">
       <div>
         <h2 style="margin:0;">Onay Bekleyenler</h2>
-        <div class="admin-stat">Hoşgeldin, <%= username %> · <%= pending.length %> bekleyen · <%= approvedCount %> onaylı anı yayında</div>
+        <div class="admin-stat">
+          Hoşgeldin, <%= username %>
+          <span style="color:var(--accent-3);">(<%= adminRole === 'superadmin' ? 'Süper Admin' : 'Moderatör' %>)</span>
+          · <%= pending.length %> bekleyen · <%= approvedCount %> onaylı anı yayında
+        </div>
       </div>
     </div>
 
@@ -89,7 +93,10 @@
           <div class="info">
             <div class="name"><%= item.uploaderName %> <span style="color:var(--text-dim); font-weight:400;">— <%= item.type === 'video' ? 'video' : 'fotoğraf' %></span></div>
             <% if (item.caption) { %><div class="caption"><%= item.caption %></div><% } %>
-            <div class="date"><%= new Date(item.createdAt).toLocaleString('tr-TR') %> · IP: <%= item.ip || 'bilinmiyor' %></div>
+            <div class="date">
+              <%= new Date(item.createdAt).toLocaleString('tr-TR') %>
+              <% if (adminRole === 'superadmin') { %> · IP: <%= item.ip || 'bilinmiyor' %><% } %>
+            </div>
           </div>
           <div class="actions">
             <button class="btn approve small" data-action="approve" data-id="<%= item.id %>">✓ Onayla</button>
@@ -100,6 +107,7 @@
       <% }) %>
     </div>
 
+    <% if (adminRole === 'superadmin') { %>
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
         <h2 style="margin:0;">Yasaklı IP'ler</h2>
@@ -216,6 +224,7 @@
         </div>
       <% }) %>
     </div>
+    <% } %>
   </div>
 
   <script src="/js/social-menu.js"></script>

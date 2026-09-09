@@ -101,7 +101,7 @@ function getCookie(req, name) {
   return null;
 }
 
-async function issueRememberCookie(res, { subjectType, subjectId, username }) {
+async function issueRememberCookie(res, { subjectType, subjectId, username, role }) {
   const raw = crypto.randomBytes(32).toString('hex');
   const tokenHash = sha256(raw);
   await rememberTokens.create({
@@ -109,6 +109,7 @@ async function issueRememberCookie(res, { subjectType, subjectId, username }) {
     subjectType,
     subjectId,
     username,
+    role: role || null,
     createdAt: Date.now(),
     expiresAt: Date.now() + REMEMBER_MS,
   });
@@ -153,26 +154,33 @@ app.use(async (req, res, next) => {
     await rememberTokens.remove(record.tokenHash);
 
     req.session.regenerate(async (err) => {
-      if (err) return next();
-
-      if (record.subjectType === 'admin') {
-        req.session.isAdmin = true;
-      } else {
-        req.session.userId = record.subjectId;
-      }
-      req.session.username = record.username;
-      req.session.justAutoLoggedIn = true;
-
       try {
-        await issueRememberCookie(res, {
-          subjectType: record.subjectType,
-          subjectId: record.subjectId,
-          username: record.username,
-        });
+        if (err) return next();
+
+        if (record.subjectType === 'admin') {
+          req.session.isAdmin = true;
+          req.session.adminRole = record.role || 'superadmin';
+        } else {
+          req.session.userId = record.subjectId;
+        }
+        req.session.username = record.username;
+        req.session.justAutoLoggedIn = true;
+
+        try {
+          await issueRememberCookie(res, {
+            subjectType: record.subjectType,
+            subjectId: record.subjectId,
+            username: record.username,
+            role: record.role,
+          });
+        } catch (e) {
+          console.error('remember token yenileme hatası:', e.message);
+        }
+        next();
       } catch (e) {
-        console.error('remember token yenileme hatası:', e.message);
+        console.error('Otomatik giriş kurulum hatası:', e.message);
+        next();
       }
-      next();
     });
   } catch (e) {
     console.error('Otomatik giriş kontrolü hatası:', e.message);
@@ -250,6 +258,17 @@ function requireAdminPage(req, res, next) {
 // res.json() "Unexpected token '<'" hatasıyla patlar — asıl hatanın kaynağı buydu.
 function requireAdminApi(req, res, next) {
   if (req.session && req.session.isAdmin) return next();
+  return res.status(401).json({ error: 'Oturumun sona ermiş. Lütfen tekrar giriş yap.', loginRequired: true });
+}
+
+// Sadece tam yetkili admin ("superadmin") kullanabilir — moderatör hesabı
+// onay/red/IP-yasaklama dışındaki hiçbir işlemi (ayarlar, kullanıcı
+// limitleri, yasağı kaldırma) yapamaz.
+function requireSuperAdminApi(req, res, next) {
+  if (req.session && req.session.isAdmin && req.session.adminRole === 'superadmin') return next();
+  if (req.session && req.session.isAdmin) {
+    return res.status(403).json({ error: 'Bu işlem için yetkin yok.' });
+  }
   return res.status(401).json({ error: 'Oturumun sona ermiş. Lütfen tekrar giriş yap.', loginRequired: true });
 }
 
@@ -500,15 +519,24 @@ app.post(
     userGuard.resetAttempts(ip);
 
     req.session.regenerate(async (err) => {
-      if (err) return res.render('login', { error: 'Bir hata oluştu, tekrar dene.' });
-      req.session.userId = user.id;
-      req.session.username = user.username;
+      // Bu callback'in tamamı kasıtlı olarak try/catch ile sarılı — session
+      // kütüphanesi bu callback'i "ateşle ve unut" şekilde çağırıyor, yani
+      // içeride yakalanmayan bir hata dışarıdaki asyncRoute/middleware
+      // zincirine hiç ulaşmıyor ve istek hiç yanıtlanmadan asılı kalabiliyordu.
       try {
-        await issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+        if (err) return res.render('login', { error: 'Bir hata oluştu, tekrar dene.' });
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        try {
+          await issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+        } catch (e) {
+          console.error('remember token oluşturma hatası:', e.message);
+        }
+        res.redirect('/upload');
       } catch (e) {
-        console.error('remember token oluşturma hatası:', e.message);
+        console.error('Giriş sonrası hata:', e.message);
+        if (!res.headersSent) res.render('login', { error: 'Bir hata oluştu, tekrar dene.' });
       }
-      res.redirect('/upload');
     });
   })
 );
@@ -558,15 +586,20 @@ app.post(
     }
 
     req.session.regenerate(async (err) => {
-      if (err) return res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });
-      req.session.userId = user.id;
-      req.session.username = user.username;
       try {
-        await issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+        if (err) return res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        try {
+          await issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+        } catch (e) {
+          console.error('remember token oluşturma hatası:', e.message);
+        }
+        res.redirect('/upload');
       } catch (e) {
-        console.error('remember token oluşturma hatası:', e.message);
+        console.error('Kayıt sonrası hata:', e.message);
+        if (!res.headersSent) res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });
       }
-      res.redirect('/upload');
     });
   })
 );
@@ -604,29 +637,50 @@ app.post(
     }
 
     const { username, password } = req.body;
-    const expectedUsername = process.env.ADMIN_USERNAME || 'admin';
-    const expectedPassword = process.env.ADMIN_PASSWORD || '';
+    const modUsername = process.env.ADMIN_USERNAME || 'admin';
+    const modPassword = process.env.ADMIN_PASSWORD || '';
+    const superUsername = process.env.SUPERADMIN_USERNAME || 'dxrks91';
+    const superPassword = process.env.SUPERADMIN_PASSWORD || '';
 
-    const usernameOk = safeStringEqual(username, expectedUsername);
-    const passwordOk = verifyPassword(password, expectedPassword);
+    // İki farklı admin hesabından hangisiyle eşleştiğini bul. Önce kullanıcı
+    // adına bakılır (moderatör hesabıyla aynı isim/şifre kalıyor, sadece
+    // yetkileri kısıtlı — bkz. requireSuperAdminApi ve admin.ejs).
+    let matchedRole = null;
+    if (safeStringEqual(username, modUsername) && verifyPassword(password, modPassword)) {
+      matchedRole = 'moderator';
+    } else if (safeStringEqual(username, superUsername) && verifyPassword(password, superPassword)) {
+      matchedRole = 'superadmin';
+    }
 
-    if (!usernameOk || !passwordOk) {
+    if (!matchedRole) {
       adminGuard.registerFailedAttempt(ip);
       return res.render('admin-login', { error: 'Kullanıcı adı veya şifre yanlış.' });
     }
 
     adminGuard.resetAttempts(ip);
+    const loggedInUsername = matchedRole === 'moderator' ? modUsername : superUsername;
 
     req.session.regenerate(async (err) => {
-      if (err) return res.render('admin-login', { error: 'Bir hata oluştu, tekrar dene.' });
-      req.session.isAdmin = true;
-      req.session.username = expectedUsername;
       try {
-        await issueRememberCookie(res, { subjectType: 'admin', subjectId: 'admin', username: expectedUsername });
+        if (err) return res.render('admin-login', { error: 'Bir hata oluştu, tekrar dene.' });
+        req.session.isAdmin = true;
+        req.session.adminRole = matchedRole;
+        req.session.username = loggedInUsername;
+        try {
+          await issueRememberCookie(res, {
+            subjectType: 'admin',
+            subjectId: 'admin',
+            username: loggedInUsername,
+            role: matchedRole,
+          });
+        } catch (e) {
+          console.error('remember token oluşturma hatası:', e.message);
+        }
+        res.redirect('/admin');
       } catch (e) {
-        console.error('remember token oluşturma hatası:', e.message);
+        console.error('Admin girişi sonrası hata:', e.message);
+        if (!res.headersSent) res.render('admin-login', { error: 'Bir hata oluştu, tekrar dene.' });
       }
-      res.redirect('/admin');
     });
   })
 );
@@ -659,18 +713,24 @@ app.get(
   '/admin',
   requireAdminPage,
   asyncRoute(async (req, res) => {
+    const isSuperAdmin = req.session.adminRole === 'superadmin';
+
+    // Moderatör hesabı için IP listesi/genel ayarlar/kullanıcı limitleri hiç
+    // çekilmiyor bile — hem gereksiz Supabase isteği yapılmasın hem de bu
+    // veriler yanlışlıkla template'e sızmasın diye.
     const [pending, approvedCount, banList, customLimitUsers, globalSettings] = await Promise.all([
       db.getPendingItems(),
       db.getApprovedCount(),
-      bans.listBans(),
-      users.listUsersWithCustomLimits(),
-      getSettingsSafe(),
+      isSuperAdmin ? bans.listBans() : Promise.resolve([]),
+      isSuperAdmin ? users.listUsersWithCustomLimits() : Promise.resolve([]),
+      isSuperAdmin ? getSettingsSafe() : Promise.resolve(FALLBACK_SETTINGS),
     ]);
 
     res.render('admin', {
       pending,
       approvedCount,
       username: req.session.username || 'admin',
+      adminRole: req.session.adminRole || 'superadmin',
       bans: banList,
       customLimitUsers,
       settings: globalSettings,
@@ -679,9 +739,10 @@ app.get(
 );
 
 // Site geneli varsayılan ayarları güncelle (günlük limit, boyut/süre sınırları)
+// — sadece tam yetkili admin.
 app.post(
   '/api/admin/settings',
-  requireAdminApi,
+  requireSuperAdminApi,
   asyncRoute(async (req, res) => {
     const { dailySubmitLimit, maxImageMb, maxVideoMb, maxVideoDurationSec } = req.body;
 
@@ -714,9 +775,10 @@ app.post(
 
 // Belirli bir kullanıcı için özel dosya boyutu/süre sınırları belirle.
 // Bir alan boş bırakılırsa o alan genel ayara döner (null yapılır).
+// — sadece tam yetkili admin.
 app.post(
   '/api/admin/user-limits',
-  requireAdminApi,
+  requireSuperAdminApi,
   asyncRoute(async (req, res) => {
     const { username, imageMb, videoMb, videoDurationSec } = req.body;
     if (!username || !username.trim()) {
@@ -748,7 +810,7 @@ app.post(
 
 app.post(
   '/api/admin/user-limits/reset',
-  requireAdminApi,
+  requireSuperAdminApi,
   asyncRoute(async (req, res) => {
     const { username } = req.body;
     if (!username || !username.trim()) {
@@ -760,6 +822,8 @@ app.post(
   })
 );
 
+// Onaylama, reddetme ve IP yasaklama — hem moderatör hem tam yetkili admin
+// kullanabilir.
 app.post(
   '/api/admin/approve/:id',
   requireAdminApi,
@@ -793,7 +857,9 @@ app.post(
 );
 
 // Bir öğeyi reddedip gönderen IP'yi yasaklar; aynı IP'den bekleyen diğer
-// tüm gönderiler de temizlenir.
+// tüm gönderiler de temizlenir. Moderatör bu işlemi yapabilir AMA gerçek
+// IP adresini asla response'da görmez — sadece işlem sonucu (ok/removedCount)
+// döner, ip alanı bilerek dahil edilmez.
 app.post(
   '/api/admin/ban/:id',
   requireAdminApi,
@@ -822,9 +888,10 @@ app.post(
   })
 );
 
+// Yasağı kaldırma — sadece tam yetkili admin (moderatör IP'yi zaten göremiyor).
 app.post(
   '/api/admin/unban',
-  requireAdminApi,
+  requireSuperAdminApi,
   asyncRoute(async (req, res) => {
     const { ip } = req.body;
     if (!ip) return res.status(400).json({ error: 'IP belirtilmedi.' });
@@ -843,33 +910,45 @@ app.get('/upload', requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, 'protected', 'upload.html'));
 });
 
+// Bir kullanıcının profil sayfası için gereken tüm veriyi tek yerden toplar
+// (kendi profili — pending dahil tüm anıları + limitleri + bio görür).
+async function buildOwnProfileData(userId, username) {
+  const [user, myItems, globalSettings] = await Promise.all([
+    users.findUserById(userId),
+    db.getItemsByUserId(userId),
+    getSettingsSafe(),
+  ]);
+
+  const approvedItems = myItems.filter((i) => i.status === 'approved');
+  const pendingCount = myItems.filter((i) => i.status === 'pending').length;
+  const totalLikes = await likes.countLikesForItemIds(approvedItems.map((i) => i.id));
+  const likeCounts = await likes.getAllCounts();
+  const limits = effectiveLimitsFor(user, globalSettings);
+
+  const items = myItems.map((i) => ({ ...i, likes: likeCounts[i.id] || 0 }));
+
+  return {
+    username,
+    bio: user ? user.bio : '',
+    createdAt: user ? user.createdAt : null,
+    totalCount: myItems.length,
+    approvedCount: approvedItems.length,
+    pendingCount,
+    totalLikes,
+    items,
+    limits,
+    hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
+    error: null,
+    success: null,
+  };
+}
+
 app.get(
   '/profile',
   requireUserPage,
   asyncRoute(async (req, res) => {
-    const [user, myItems, globalSettings] = await Promise.all([
-      users.findUserById(req.session.userId),
-      db.getItemsByUserId(req.session.userId),
-      getSettingsSafe(),
-    ]);
-
-    const approvedItems = myItems.filter((i) => i.status === 'approved');
-    const pendingCount = myItems.filter((i) => i.status === 'pending').length;
-    const totalLikes = await likes.countLikesForItemIds(approvedItems.map((i) => i.id));
-    const limits = effectiveLimitsFor(user, globalSettings);
-
-    res.render('profile', {
-      username: req.session.username,
-      createdAt: user ? user.createdAt : null,
-      totalCount: myItems.length,
-      approvedCount: approvedItems.length,
-      pendingCount,
-      totalLikes,
-      limits,
-      hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
-      error: null,
-      success: null,
-    });
+    const data = await buildOwnProfileData(req.session.userId, req.session.username);
+    res.render('profile', data);
   })
 );
 
@@ -879,44 +958,86 @@ app.post(
   asyncRoute(async (req, res) => {
     const { currentPassword, newPassword, confirmNewPassword } = req.body;
 
-    const renderWith = async (error, success) => {
-      const [user, myItems, globalSettings] = await Promise.all([
-        users.findUserById(req.session.userId),
-        db.getItemsByUserId(req.session.userId),
-        getSettingsSafe(),
-      ]);
-      const approvedItems = myItems.filter((i) => i.status === 'approved');
-      const pendingCount = myItems.filter((i) => i.status === 'pending').length;
-      const totalLikes = await likes.countLikesForItemIds(approvedItems.map((i) => i.id));
-      const limits = effectiveLimitsFor(user, globalSettings);
-
-      res.render('profile', {
-        username: req.session.username,
-        createdAt: user ? user.createdAt : null,
-        totalCount: myItems.length,
-        approvedCount: approvedItems.length,
-        pendingCount,
-        totalLikes,
-        limits,
-        hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
-        error,
-        success,
-      });
-    };
-
     const user = await users.findUserById(req.session.userId);
     if (!user || !verifyHashedPassword(currentPassword, user.passwordHash)) {
-      return renderWith('Mevcut şifren yanlış.', null);
+      const data = await buildOwnProfileData(req.session.userId, req.session.username);
+      return res.render('profile', { ...data, error: 'Mevcut şifren yanlış.' });
     }
     if (!newPassword || newPassword.length < 6) {
-      return renderWith('Yeni şifre en az 6 karakter olmalı.', null);
+      const data = await buildOwnProfileData(req.session.userId, req.session.username);
+      return res.render('profile', { ...data, error: 'Yeni şifre en az 6 karakter olmalı.' });
     }
     if (newPassword !== confirmNewPassword) {
-      return renderWith('Yeni şifreler eşleşmiyor.', null);
+      const data = await buildOwnProfileData(req.session.userId, req.session.username);
+      return res.render('profile', { ...data, error: 'Yeni şifreler eşleşmiyor.' });
     }
 
     await users.updatePasswordHash(user.id, hashPassword(newPassword));
-    renderWith(null, 'Şifren başarıyla güncellendi.');
+    const data = await buildOwnProfileData(req.session.userId, req.session.username);
+    res.render('profile', { ...data, success: 'Şifren başarıyla güncellendi.' });
+  })
+);
+
+app.post(
+  '/profile/update-bio',
+  requireUserPage,
+  asyncRoute(async (req, res) => {
+    const bio = (req.body.bio || '').toString().trim().slice(0, 160);
+    await users.updateBio(req.session.userId, bio);
+    const data = await buildOwnProfileData(req.session.userId, req.session.username);
+    res.render('profile', { ...data, success: 'Profilin güncellendi.' });
+  })
+);
+
+// Kendi gönderdiğin bir anıyı (bekleyen ya da onaylı) tamamen sil.
+app.post(
+  '/profile/delete/:id',
+  requireUserPage,
+  asyncRoute(async (req, res) => {
+    const item = await db.getItemById(req.params.id);
+    if (item && item.userId === req.session.userId) {
+      try {
+        await cloudinary.uploader.destroy(item.publicId, {
+          resource_type: item.type === 'video' ? 'video' : 'image',
+        });
+      } catch (e) {
+        console.error('Cloudinary silme hatası (profil):', e.message);
+      }
+      await db.deleteItem(item.id);
+      await likes.removeAllForItem(item.id);
+      await viewsStore.removeAllForItem(item.id);
+    }
+    // item bulunamadıysa ya da başkasına aitse sessizce yok say — kendi
+    // anılarının kimliğini/id'sini bilmeyen biri başkasının anısını silemez.
+    const data = await buildOwnProfileData(req.session.userId, req.session.username);
+    res.render('profile', { ...data, success: 'Anı silindi.' });
+  })
+);
+
+// Herkese açık profil — sadece onaylı anılar, sadece herkese açık bilgiler
+// (bekleyen sayısı, sınırlar, IP gibi özel bilgiler asla gösterilmez).
+app.get(
+  '/u/:username',
+  asyncRoute(async (req, res) => {
+    const user = await users.findUserByUsername(req.params.username);
+    if (!user) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+
+    const [myItems, likeCounts] = await Promise.all([db.getItemsByUserId(user.id), likes.getAllCounts()]);
+    const approvedItems = myItems
+      .filter((i) => i.status === 'approved')
+      .map((i) => ({ ...i, likes: likeCounts[i.id] || 0, ip: undefined }))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    const totalLikes = approvedItems.reduce((sum, i) => sum + i.likes, 0);
+
+    res.render('public-profile', {
+      profileUsername: user.username,
+      bio: user.bio,
+      createdAt: user.createdAt,
+      approvedCount: approvedItems.length,
+      totalLikes,
+      items: approvedItems,
+      isOwnProfile: req.session && req.session.username === user.username,
+    });
   })
 );
 

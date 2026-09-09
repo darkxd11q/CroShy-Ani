@@ -6,6 +6,7 @@ function fromRow(row) {
     username: row.username,
     passwordHash: row.password_hash,
     createdAt: row.created_at,
+    bio: row.bio || '',
     customImageBytes: row.custom_image_bytes != null ? Number(row.custom_image_bytes) : null,
     customVideoBytes: row.custom_video_bytes != null ? Number(row.custom_video_bytes) : null,
     customVideoDurationSec: row.custom_video_duration_sec != null ? Number(row.custom_video_duration_sec) : null,
@@ -56,6 +57,11 @@ async function updatePasswordHash(userId, newHash) {
   if (error) throw error;
 }
 
+async function updateBio(userId, bio) {
+  const { error } = await supabase.from('app_users').update({ bio: (bio || '').slice(0, 160) }).eq('id', userId);
+  if (error) throw error;
+}
+
 // Admin panelinden bir kullanıcı için özel dosya boyutu/süre sınırları
 // belirler. Bir alan null geçilirse o alan "genel ayara dön" anlamına gelir.
 async function setCustomLimits(username, { imageBytes, videoBytes, videoDurationSec }) {
@@ -92,6 +98,7 @@ module.exports = {
   findUserById,
   createUser,
   updatePasswordHash,
+  updateBio,
   setCustomLimits,
   clearCustomLimits,
   listUsersWithCustomLimits,

@@ -65,7 +65,7 @@ function renderRow(item, index) {
         </button>
         <div class="overlay">
           <div class="meta">
-            <div class="name">${escapeHtml(item.uploaderName)}</div>
+            <div class="name"><a href="/u/${encodeURIComponent(item.uploaderName)}" class="uploader-link" onclick="event.stopPropagation()">${escapeHtml(item.uploaderName)}</a></div>
             ${item.caption ? `<div class="caption">${escapeHtml(item.caption)}</div>` : ''}
           </div>
         </div>

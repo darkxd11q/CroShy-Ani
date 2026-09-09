@@ -474,6 +474,8 @@ nav.site-nav { display: flex; gap: 10px; align-items: center; }
 }
 .memory-card .meta { color: #fff; }
 .memory-card .meta .name { font-weight: 600; font-size: 1rem; }
+.uploader-link { color: #fff; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s ease; }
+.uploader-link:hover { border-bottom-color: rgba(255,255,255,0.6); }
 .memory-card .meta .caption { color: rgba(255,255,255,0.75); font-size: 0.85rem; margin-top: 4px; }
 .memory-card .badge {
   position: absolute; top: 16px; right: 16px;

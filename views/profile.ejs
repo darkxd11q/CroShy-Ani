@@ -65,24 +65,40 @@
     <span class="eyebrow">Hesabım</span>
     <h1 style="margin: 14px 0 24px; font-size: 1.8rem;">Profilim</h1>
 
+    <% if (error) { %>
+      <div class="login-error" style="margin-bottom:16px;"><%= error %></div>
+    <% } %>
+    <% if (success) { %>
+      <div class="status-msg show ok" style="margin-bottom:16px;"><%= success %></div>
+    <% } %>
+
     <div class="upload-card" style="margin-bottom: 20px;">
-      <div style="display:flex; align-items:center; gap:14px; margin-bottom: 22px;">
-        <div class="brand-mark-wrap" style="width:52px; height:52px;">
-          <div style="width:100%; height:100%; border-radius:9px; background:linear-gradient(135deg, var(--accent-1), var(--accent-2)); display:flex; align-items:center; justify-content:center; font-family:var(--font-head); font-weight:700; font-size:1.4rem; color:#fff;">
-            <%= username.charAt(0).toUpperCase() %>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom: 18px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div class="brand-mark-wrap" style="width:52px; height:52px;">
+            <div style="width:100%; height:100%; border-radius:9px; background:linear-gradient(135deg, var(--accent-1), var(--accent-2)); display:flex; align-items:center; justify-content:center; font-family:var(--font-head); font-weight:700; font-size:1.4rem; color:#fff;">
+              <%= username.charAt(0).toUpperCase() %>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:var(--font-head); font-weight:700; font-size:1.25rem;"><%= username %></div>
+            <div style="color:var(--text-dim); font-size:0.85rem;">
+              <% if (createdAt) { %>Katılma: <%= new Date(createdAt).toLocaleDateString('tr-TR') %><% } %>
+            </div>
           </div>
         </div>
-        <div>
-          <div style="font-family:var(--font-head); font-weight:700; font-size:1.25rem;"><%= username %></div>
-          <div style="color:var(--text-dim); font-size:0.85rem;">
-            <% if (createdAt) { %>
-              Katılma: <%= new Date(createdAt).toLocaleDateString('tr-TR') %>
-            <% } %>
-          </div>
-        </div>
+        <a href="/u/<%= username %>" class="btn ghost small">Herkese Açık Halini Gör ↗</a>
       </div>
 
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 8px;">
+      <form method="POST" action="/profile/update-bio" style="margin-bottom: 20px;">
+        <div class="field" style="margin:0;">
+          <label for="bio">Hakkımda (herkese açık profilinde görünür)</label>
+          <textarea id="bio" name="bio" maxlength="160" placeholder="Kendinle ilgili birkaç kelime…" style="min-height:60px;"><%= bio %></textarea>
+        </div>
+        <button type="submit" class="btn small" style="margin-top:10px;">Kaydet</button>
+      </form>
+
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
         <div style="text-align:center; background:rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:14px 8px;">
           <div style="font-family:var(--font-head); font-weight:700; font-size:1.5rem;"><%= approvedCount %></div>
           <div style="color:var(--text-dim); font-size:0.78rem;">Onaylı Anı</div>
@@ -101,11 +117,7 @@
     <div class="upload-card" style="margin-bottom: 20px;">
       <h2 style="margin:0 0 4px; font-size:1.05rem;">Yükleme Sınırların</h2>
       <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom: 14px;">
-        <% if (hasCustomLimits) { %>
-          Admin tarafından senin için özel olarak ayarlanmış.
-        <% } else { %>
-          Site genelindeki varsayılan sınırlar geçerli.
-        <% } %>
+        <% if (hasCustomLimits) { %>Admin tarafından senin için özel olarak ayarlanmış.<% } else { %>Site genelindeki varsayılan sınırlar geçerli.<% } %>
       </p>
       <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size:0.85rem;">
         <div>📷 Fotoğraf: <strong><%= (limits.imageBytes / (1024*1024)).toFixed(1) %> MB</strong></div>
@@ -114,15 +126,35 @@
       </div>
     </div>
 
+    <div class="upload-card" style="margin-bottom: 20px;">
+      <h2 style="margin:0 0 14px; font-size:1.05rem;">Anıların (<%= items.length %>)</h2>
+      <% if (items.length === 0) { %>
+        <div class="empty-state">Henüz bir anı göndermedin.</div>
+      <% } else { %>
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px;">
+          <% items.forEach(function(item) { %>
+            <div style="position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--card-border); aspect-ratio:1;">
+              <% if (item.type === 'video') { %>
+                <video src="<%= item.url %>" muted loop autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+              <% } else { %>
+                <img src="<%= item.url %>" alt="" style="width:100%; height:100%; object-fit:cover;" />
+              <% } %>
+              <span style="position:absolute; top:6px; left:6px; background:rgba(0,0,0,0.55); color:#fff; font-size:0.65rem; padding:3px 7px; border-radius:999px;">
+                <%= item.status === 'approved' ? '✓ Onaylı' : '⏳ Bekliyor' %>
+              </span>
+              <span style="position:absolute; bottom:6px; left:6px; background:rgba(0,0,0,0.55); color:#fff; font-size:0.65rem; padding:3px 7px; border-radius:999px;">❤️ <%= item.likes %></span>
+              <form method="POST" action="/profile/delete/<%= item.id %>" onsubmit="return confirm('Bu anıyı silmek istediğine emin misin? Bu işlem geri alınamaz.');" style="position:absolute; top:6px; right:6px;">
+                <button type="submit" style="width:26px; height:26px; border-radius:50%; border:none; background:rgba(0,0,0,0.6); color:#fda4af; font-size:0.85rem; cursor:pointer;">✕</button>
+              </form>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+    </div>
+
     <div class="upload-card">
       <h2 style="margin:0 0 14px; font-size:1.05rem;">Şifreni Değiştir</h2>
       <form method="POST" action="/profile/change-password">
-        <% if (error) { %>
-          <div class="login-error" style="margin-bottom:14px;"><%= error %></div>
-        <% } %>
-        <% if (success) { %>
-          <div class="status-msg show ok" style="margin-bottom:14px;"><%= success %></div>
-        <% } %>
         <div class="field">
           <label for="currentPassword">Mevcut şifre</label>
           <input type="password" id="currentPassword" name="currentPassword" autocomplete="current-password" required

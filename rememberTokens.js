@@ -6,17 +6,19 @@ function fromRow(row) {
     subjectType: row.subject_type,
     subjectId: row.subject_id,
     username: row.username,
+    role: row.role || null,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
   };
 }
 
-async function create({ tokenHash, subjectType, subjectId, username, createdAt, expiresAt }) {
+async function create({ tokenHash, subjectType, subjectId, username, role, createdAt, expiresAt }) {
   const { error } = await supabase.from('remember_tokens').insert({
     token_hash: tokenHash,
     subject_type: subjectType,
     subject_id: subjectId,
     username,
+    role: role || null,
     created_at: createdAt,
     expires_at: expiresAt,
   });
