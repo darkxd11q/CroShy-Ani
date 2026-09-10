@@ -118,6 +118,51 @@ document.querySelectorAll('#limits-list [data-action="reset-limits"]').forEach((
   });
 });
 
+// Rozet ver formu
+const badgeForm = document.getElementById('badge-form');
+if (badgeForm) {
+  badgeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const statusEl = document.getElementById('badgeStatus');
+    const username = document.getElementById('badgeUsername').value.trim();
+    const badge = document.getElementById('badgeType').value;
+    if (!username) return;
+
+    try {
+      const data = await adminFetch('/api/admin/badges/grant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, badge }),
+      });
+      statusEl.textContent = `"${data.username}" kullanıcısına rozet verildi.`;
+      statusEl.className = 'status-msg show ok';
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      statusEl.textContent = 'Hata: ' + err.message;
+      statusEl.className = 'status-msg show err';
+    }
+  });
+}
+
+// Rozet kaldır butonları (her rozet pilinin içindeki ✕)
+document.querySelectorAll('#badges-list [data-action="revoke-badge"]').forEach((btn) => {
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    btn.disabled = true;
+    try {
+      await adminFetch('/api/admin/badges/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: btn.dataset.username, badge: btn.dataset.badge }),
+      });
+      window.location.reload();
+    } catch (err) {
+      alert('Hata: ' + err.message);
+      btn.disabled = false;
+    }
+  });
+});
+
 async function handlePendingAction(id, action, btn) {
   const item = btn.closest('.pending-item');
   const buttons = item.querySelectorAll('button');

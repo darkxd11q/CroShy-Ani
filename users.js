@@ -7,6 +7,7 @@ function fromRow(row) {
     passwordHash: row.password_hash,
     createdAt: row.created_at,
     bio: row.bio || '',
+    badges: Array.isArray(row.badges) ? row.badges : [],
     customImageBytes: row.custom_image_bytes != null ? Number(row.custom_image_bytes) : null,
     customVideoBytes: row.custom_video_bytes != null ? Number(row.custom_video_bytes) : null,
     customVideoDurationSec: row.custom_video_duration_sec != null ? Number(row.custom_video_duration_sec) : null,
@@ -93,6 +94,97 @@ async function listUsersWithCustomLimits() {
   return (data || []).map(fromRow);
 }
 
+// ---------- Rozetler ----------
+
+async function grantBadge(username, badge) {
+  const user = await findUserByUsername(username);
+  if (!user) return null;
+  if (user.badges.includes(badge)) return user;
+
+  const nextBadges = [...user.badges, badge];
+  const { data, error } = await supabase
+    .from('app_users')
+    .update({ badges: nextBadges })
+    .eq('id', user.id)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data) : null;
+}
+
+async function revokeBadge(username, badge) {
+  const user = await findUserByUsername(username);
+  if (!user) return null;
+
+  const nextBadges = user.badges.filter((b) => b !== badge);
+  const { data, error } = await supabase
+    .from('app_users')
+    .update({ badges: nextBadges })
+    .eq('id', user.id)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data) : null;
+}
+
+async function listUsersWithBadges() {
+  // Küçük ölçekli bir site için tüm kullanıcıları çekip JS tarafında
+  // filtrelemek, jsonb dizisi üzerinde kırılgan bir PostgREST filtresi
+  // kurmaya çalışmaktan daha güvenilir.
+  const { data, error } = await supabase.from('app_users').select('*');
+  if (error) throw error;
+  return (data || []).map(fromRow).filter((u) => u.badges.length > 0);
+}
+
+// Bu haftaki (son 7 gün) en çok anı gönderen ve en çok beğeni toplayan
+// kullanıcılar — admin panelinde "Haftanın Aktifi"/"Haftanın Beğenileni"
+// rozetini kime vereceğine karar vermesi için referans listesi.
+async function getWeeklyLeaderboard() {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, uploader_name, user_id, status, created_at')
+    .gt('created_at', cutoff);
+  if (error) throw error;
+
+  const items = data || [];
+  const submissionCounts = {};
+  for (const item of items) {
+    const key = item.uploader_name;
+    submissionCounts[key] = (submissionCounts[key] || 0) + 1;
+  }
+
+  const approvedIds = items.filter((i) => i.status === 'approved').map((i) => i.id);
+  let likeRows = [];
+  if (approvedIds.length > 0) {
+    const { data, error: likeErr } = await supabase.from('likes').select('item_id').in('item_id', approvedIds);
+    if (likeErr) throw likeErr;
+    likeRows = data || [];
+  }
+
+  const likesByItem = {};
+  for (const row of likeRows || []) {
+    likesByItem[row.item_id] = (likesByItem[row.item_id] || 0) + 1;
+  }
+  const likeCounts = {};
+  for (const item of items) {
+    if (item.status !== 'approved') continue;
+    const n = likesByItem[item.id] || 0;
+    likeCounts[item.uploader_name] = (likeCounts[item.uploader_name] || 0) + n;
+  }
+
+  const toSortedArray = (obj) =>
+    Object.entries(obj)
+      .map(([username, count]) => ({ username, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+  return {
+    topSubmitters: toSortedArray(submissionCounts),
+    topLiked: toSortedArray(likeCounts),
+  };
+}
+
 module.exports = {
   findUserByUsername,
   findUserById,
@@ -102,4 +194,8 @@ module.exports = {
   setCustomLimits,
   clearCustomLimits,
   listUsersWithCustomLimits,
+  grantBadge,
+  revokeBadge,
+  listUsersWithBadges,
+  getWeeklyLeaderboard,
 };

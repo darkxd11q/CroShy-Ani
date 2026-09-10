@@ -60,56 +60,55 @@
     </nav>
   </header>
 
-  <div class="upload-wrap">
-    <div class="upload-card" style="margin-bottom: 20px;">
-      <div style="display:flex; align-items:center; gap:14px; margin-bottom: <%= bio ? '14px' : '0' %>;">
-        <div class="brand-mark-wrap" style="width:60px; height:60px;">
-          <div style="width:100%; height:100%; border-radius:9px; background:linear-gradient(135deg, var(--accent-1), var(--accent-2)); display:flex; align-items:center; justify-content:center; font-family:var(--font-head); font-weight:700; font-size:1.6rem; color:#fff;">
-            <%= profileUsername.charAt(0).toUpperCase() %>
+  <div class="upload-wrap" style="max-width: 780px;">
+    <div class="upload-card" style="margin-bottom: 22px;">
+      <div class="profile-hero" style="margin-bottom: 0;">
+        <div class="profile-avatar" style="width:76px; height:76px; min-width:76px; font-size:2rem;"><%= profileUsername.charAt(0).toUpperCase() %></div>
+        <div class="profile-identity">
+          <div class="profile-name-row">
+            <span class="profile-name" style="font-size:1.7rem;"><%= profileUsername %></span>
           </div>
-        </div>
-        <div>
-          <div style="font-family:var(--font-head); font-weight:700; font-size:1.4rem;"><%= profileUsername %></div>
-          <div style="color:var(--text-dim); font-size:0.85rem;">
-            <% if (createdAt) { %>CroShy Anı'na katıldı: <%= new Date(createdAt).toLocaleDateString('tr-TR') %><% } %>
-          </div>
+          <% if (badges && badges.length > 0) { %>
+            <div class="badge-row">
+              <% BADGE_ORDER.forEach(function(code) { %>
+                <% if (badges.includes(code)) { %>
+                  <span class="badge-pill <%= BADGE_INFO[code].className %>"><%= BADGE_INFO[code].icon %> <%= BADGE_INFO[code].label %></span>
+                <% } %>
+              <% }) %>
+            </div>
+          <% } %>
+          <div class="profile-joined"><% if (createdAt) { %>CroShy Anı'na katıldı: <%= new Date(createdAt).toLocaleDateString('tr-TR') %><% } %></div>
+          <% if (bio) { %><p class="profile-bio"><%= bio %></p><% } %>
         </div>
       </div>
-      <% if (bio) { %>
-        <p style="color:var(--text); font-size:0.9rem; margin: 0; padding-top:14px; border-top:1px solid var(--card-border);"><%= bio %></p>
-      <% } %>
 
-      <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px;">
-        <div style="text-align:center; background:rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:14px 8px;">
-          <div style="font-family:var(--font-head); font-weight:700; font-size:1.5rem;"><%= approvedCount %></div>
-          <div style="color:var(--text-dim); font-size:0.78rem;">Paylaşılan Anı</div>
+      <div class="profile-stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 20px;">
+        <div class="profile-stat-card">
+          <div class="profile-stat-value"><%= approvedCount %></div>
+          <div class="profile-stat-label">Paylaşılan Anı</div>
         </div>
-        <div style="text-align:center; background:rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:14px 8px;">
-          <div style="font-family:var(--font-head); font-weight:700; font-size:1.5rem;"><%= totalLikes %></div>
-          <div style="color:var(--text-dim); font-size:0.78rem;">Toplam Beğeni</div>
+        <div class="profile-stat-card">
+          <div class="profile-stat-value"><%= totalLikes %></div>
+          <div class="profile-stat-label">Toplam Beğeni</div>
         </div>
       </div>
     </div>
 
-    <h2 style="font-size:1.1rem; margin: 0 0 14px;"><%= profileUsername %>'in Anıları</h2>
+    <h2 class="profile-section-title">🖼️ <%= profileUsername %>'in Anıları</h2>
     <% if (items.length === 0) { %>
-      <div class="empty-state">Henüz onaylanmış bir anısı yok.</div>
+      <div class="empty-state" style="margin-bottom: 40px;">Henüz onaylanmış bir anısı yok.</div>
     <% } else { %>
-      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-bottom: 40px;">
+      <div class="public-gallery">
         <% items.forEach(function(item, idx) { %>
-          <div class="memory-card" data-index="<%= idx %>" style="height: 220px; transform:none;">
+          <div class="public-item-card" data-index="<%= idx %>">
             <% if (item.type === 'video') { %>
               <video src="<%= item.url %>" muted loop autoplay playsinline></video>
-              <div class="play-icon" style="width:44px; height:44px; font-size:1rem;">▶</div>
+              <div class="play-icon" style="width:42px; height:42px; font-size:1rem;">▶</div>
             <% } else { %>
               <img src="<%= item.url %>" alt="" loading="lazy" />
             <% } %>
-            <span class="badge"><%= item.type === 'video' ? '🎬' : '📷' %></span>
-            <div class="overlay">
-              <div class="meta">
-                <div class="caption" style="color:#fff;"><%= item.caption %></div>
-              </div>
-            </div>
+            <span class="public-item-likes">❤️ <%= item.likes %></span>
+            <% if (item.caption) { %><div class="public-item-caption"><%= item.caption %></div><% } %>
           </div>
         <% }) %>
       </div>
@@ -122,7 +121,7 @@
   <script src="/js/lightbox.js"></script>
   <script>
     const PROFILE_ITEMS = <%- JSON.stringify(items).replace(/</g, '\\u003c') %>;
-    document.querySelectorAll('.memory-card').forEach((card) => {
+    document.querySelectorAll('.public-item-card').forEach((card) => {
       card.addEventListener('click', () => {
         const idx = Number(card.dataset.index);
         openLightbox(PROFILE_ITEMS[idx]);

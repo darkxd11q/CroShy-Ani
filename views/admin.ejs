@@ -224,6 +224,92 @@
         </div>
       <% }) %>
     </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
+        <h2 style="margin:0;">Rozetler</h2>
+        <div class="admin-stat">
+          🏆 Site Kurucusu ve ❤️ CroShy rozeti sahibini <strong>tüm sınırlardan</strong> muaf tutar
+        </div>
+      </div>
+    </div>
+
+    <div class="upload-card" style="margin-bottom: 8px;">
+      <form id="badge-form" style="display:grid; grid-template-columns: 1.4fr 1.4fr auto; gap:12px; align-items:end;">
+        <div class="field" style="margin:0;">
+          <label for="badgeUsername">Kullanıcı adı</label>
+          <input type="text" id="badgeUsername" placeholder="Kullanıcı adı" maxlength="10" required
+                 style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        </div>
+        <div class="field" style="margin:0;">
+          <label for="badgeType">Rozet</label>
+          <select id="badgeType" style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;">
+            <% BADGE_ORDER.forEach(function(code) { %>
+              <option value="<%= code %>"><%= BADGE_INFO[code].icon %> <%= BADGE_INFO[code].label %></option>
+            <% }) %>
+          </select>
+        </div>
+        <button type="submit" class="btn primary" style="height:44px;">Rozet Ver</button>
+      </form>
+      <div class="status-msg" id="badgeStatus"></div>
+    </div>
+
+    <div class="pending-list" id="badges-list">
+      <% if (badgeUsers.length === 0) { %>
+        <div class="empty-state">Şu an rozeti olan bir kullanıcı yok</div>
+      <% } %>
+      <% badgeUsers.forEach(function(u) { %>
+        <div class="pending-item" data-username-row="<%= u.username %>" style="align-items:center;">
+          <div class="info">
+            <div class="name badge-holder-row">
+              <%= u.username %>
+              <% BADGE_ORDER.forEach(function(code) { %>
+                <% if (u.badges.includes(code)) { %>
+                  <span class="badge-pill <%= BADGE_INFO[code].className %>">
+                    <%= BADGE_INFO[code].icon %> <%= BADGE_INFO[code].label %>
+                    <button type="button" data-action="revoke-badge" data-username="<%= u.username %>" data-badge="<%= code %>"
+                            style="background:none; border:none; color:inherit; cursor:pointer; font-weight:700; padding:0 0 0 3px; font-size:0.85rem; line-height:1;">✕</button>
+                  </span>
+                <% } %>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 40px;">
+      <div>
+        <h2 style="margin:0;">Bu Haftanın Öne Çıkanları</h2>
+        <div class="admin-stat">Son 7 gün — "Haftanın Aktifi" / "Haftanın Beğenileni" rozetini kime vereceğine karar vermek için</div>
+      </div>
+    </div>
+    <div class="leaderboard-grid" style="margin-bottom: 20px;">
+      <div class="upload-card" style="margin:0;">
+        <h3 style="margin:0 0 12px; font-size:0.95rem;">🔥 En Çok Anı Gönderen</h3>
+        <% if (weeklyLeaderboard.topSubmitters.length === 0) { %>
+          <div class="empty-state">Bu hafta henüz gönderim yok</div>
+        <% } else { %>
+          <ol class="leaderboard-list">
+            <% weeklyLeaderboard.topSubmitters.forEach(function(row) { %>
+              <li><span class="lb-name"><%= row.username %></span><span class="lb-count"><%= row.count %> anı</span></li>
+            <% }) %>
+          </ol>
+        <% } %>
+      </div>
+      <div class="upload-card" style="margin:0;">
+        <h3 style="margin:0 0 12px; font-size:0.95rem;">⭐ En Çok Beğeni Toplayan</h3>
+        <% if (weeklyLeaderboard.topLiked.length === 0) { %>
+          <div class="empty-state">Bu hafta henüz beğeni yok</div>
+        <% } else { %>
+          <ol class="leaderboard-list">
+            <% weeklyLeaderboard.topLiked.forEach(function(row) { %>
+              <li><span class="lb-name"><%= row.username %></span><span class="lb-count"><%= row.count %> beğeni</span></li>
+            <% }) %>
+          </ol>
+        <% } %>
+      </div>
+    </div>
     <% } %>
   </div>
 

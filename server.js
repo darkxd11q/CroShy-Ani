@@ -38,6 +38,18 @@ const isProd = process.env.NODE_ENV === 'production';
 // Supabase'e ulaşılamazsa (yapılandırılmamışsa) diye makul varsayılanlar:
 const FALLBACK_SETTINGS = settings.DEFAULTS;
 
+// Admin panelinden verilebilen sabit rozet seti. "founder" ve "croshy"
+// FULL_EXEMPT_BADGES ile eşleşir (bkz. effectiveLimitsFor) — sahibi tüm
+// sınırlardan muaf olur. Sırası profil sayfalarında gösterilme sırasıdır.
+const BADGE_INFO = {
+  founder: { label: 'Site Kurucusu', icon: '🏆', className: 'badge-founder' },
+  croshy: { label: 'CroShy', icon: '❤️', className: 'badge-croshy' },
+  weekly_active: { label: 'Haftanın Aktifi', icon: '🔥', className: 'badge-weekly-active' },
+  weekly_liked: { label: 'Haftanın Beğenileni', icon: '⭐', className: 'badge-weekly-liked' },
+  member: { label: 'Üye', icon: '👤', className: 'badge-member' },
+};
+const BADGE_ORDER = ['founder', 'croshy', 'weekly_active', 'weekly_liked', 'member'];
+
 // "trust proxy" SADECE üretimde (Render'ın tek katmanlı ters proxy'si arkasında)
 // açık olmalı. Yerelde (npm start ile doğrudan çalıştırırken) bunu açık
 // bırakmak, herkesin sahte bir X-Forwarded-For başlığıyla IP'sini
@@ -235,14 +247,28 @@ async function getSettingsSafe() {
   }
 }
 
+// "Site Kurucusu" ve "CroShy" rozetine sahip kullanıcılar sitedeki HİÇBİR
+// sınıra (dosya boyutu, video süresi, günlük gönderim limiti) takılmaz.
+const FULL_EXEMPT_BADGES = ['founder', 'croshy'];
+const NO_LIMIT = Number.MAX_SAFE_INTEGER;
+
+function hasFullExemption(user) {
+  return !!(user && Array.isArray(user.badges) && user.badges.some((b) => FULL_EXEMPT_BADGES.includes(b)));
+}
+
 // Bir kullanıcı için geçerli olan (kişiye özelse onu, yoksa genel ayarı
-// kullanan) fiili sınırları hesaplar.
+// kullanan) fiili sınırları hesaplar. Muaf tutan bir rozeti varsa tüm
+// sınırlar kaldırılır.
 function effectiveLimitsFor(user, globalSettings) {
+  if (hasFullExemption(user)) {
+    return { imageBytes: NO_LIMIT, videoBytes: NO_LIMIT, videoDurationSec: NO_LIMIT, dailyLimit: NO_LIMIT, unlimited: true };
+  }
   return {
     imageBytes: (user && user.customImageBytes) || globalSettings.maxImageBytes,
     videoBytes: (user && user.customVideoBytes) || globalSettings.maxVideoBytes,
     videoDurationSec: (user && user.customVideoDurationSec) || globalSettings.maxVideoDurationSec,
     dailyLimit: globalSettings.dailySubmitLimit,
+    unlimited: false,
   };
 }
 
@@ -715,16 +741,19 @@ app.get(
   asyncRoute(async (req, res) => {
     const isSuperAdmin = req.session.adminRole === 'superadmin';
 
-    // Moderatör hesabı için IP listesi/genel ayarlar/kullanıcı limitleri hiç
-    // çekilmiyor bile — hem gereksiz Supabase isteği yapılmasın hem de bu
-    // veriler yanlışlıkla template'e sızmasın diye.
-    const [pending, approvedCount, banList, customLimitUsers, globalSettings] = await Promise.all([
-      db.getPendingItems(),
-      db.getApprovedCount(),
-      isSuperAdmin ? bans.listBans() : Promise.resolve([]),
-      isSuperAdmin ? users.listUsersWithCustomLimits() : Promise.resolve([]),
-      isSuperAdmin ? getSettingsSafe() : Promise.resolve(FALLBACK_SETTINGS),
-    ]);
+    // Moderatör hesabı için IP listesi/genel ayarlar/kullanıcı limitleri/
+    // rozetler hiç çekilmiyor bile — hem gereksiz Supabase isteği yapılmasın
+    // hem de bu veriler yanlışlıkla template'e sızmasın diye.
+    const [pending, approvedCount, banList, customLimitUsers, globalSettings, badgeUsers, weeklyLeaderboard] =
+      await Promise.all([
+        db.getPendingItems(),
+        db.getApprovedCount(),
+        isSuperAdmin ? bans.listBans() : Promise.resolve([]),
+        isSuperAdmin ? users.listUsersWithCustomLimits() : Promise.resolve([]),
+        isSuperAdmin ? getSettingsSafe() : Promise.resolve(FALLBACK_SETTINGS),
+        isSuperAdmin ? users.listUsersWithBadges() : Promise.resolve([]),
+        isSuperAdmin ? users.getWeeklyLeaderboard() : Promise.resolve({ topSubmitters: [], topLiked: [] }),
+      ]);
 
     res.render('admin', {
       pending,
@@ -734,6 +763,9 @@ app.get(
       bans: banList,
       customLimitUsers,
       settings: globalSettings,
+      badgeUsers,
+      weeklyLeaderboard,
+      BADGE_INFO,
     });
   })
 );
@@ -819,6 +851,36 @@ app.post(
     const user = await users.clearCustomLimits(username.trim());
     if (!user) return res.status(404).json({ error: 'Bu kullanıcı adında bir hesap bulunamadı.' });
     res.json({ ok: true, username: user.username });
+  })
+);
+
+// Rozet ver / kaldır — sadece tam yetkili admin. "founder"/"croshy" rozeti
+// sahibini tüm sınırlardan muaf tutar (bkz. effectiveLimitsFor).
+app.post(
+  '/api/admin/badges/grant',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    const { username, badge } = req.body;
+    if (!username || !username.trim()) return res.status(400).json({ error: 'Kullanıcı adı gerekli.' });
+    if (!BADGE_INFO[badge]) return res.status(400).json({ error: 'Geçersiz rozet.' });
+
+    const user = await users.grantBadge(username.trim(), badge);
+    if (!user) return res.status(404).json({ error: 'Bu kullanıcı adında bir hesap bulunamadı.' });
+    res.json({ ok: true, username: user.username, badges: user.badges });
+  })
+);
+
+app.post(
+  '/api/admin/badges/revoke',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    const { username, badge } = req.body;
+    if (!username || !username.trim()) return res.status(400).json({ error: 'Kullanıcı adı gerekli.' });
+    if (!BADGE_INFO[badge]) return res.status(400).json({ error: 'Geçersiz rozet.' });
+
+    const user = await users.revokeBadge(username.trim(), badge);
+    if (!user) return res.status(404).json({ error: 'Bu kullanıcı adında bir hesap bulunamadı.' });
+    res.json({ ok: true, username: user.username, badges: user.badges });
   })
 );
 
@@ -930,6 +992,9 @@ async function buildOwnProfileData(userId, username) {
   return {
     username,
     bio: user ? user.bio : '',
+    badges: user ? user.badges : [],
+    BADGE_INFO,
+    BADGE_ORDER,
     createdAt: user ? user.createdAt : null,
     totalCount: myItems.length,
     approvedCount: approvedItems.length,
@@ -1032,6 +1097,9 @@ app.get(
     res.render('public-profile', {
       profileUsername: user.username,
       bio: user.bio,
+      badges: user.badges,
+      BADGE_INFO,
+      BADGE_ORDER,
       createdAt: user.createdAt,
       approvedCount: approvedItems.length,
       totalLikes,

@@ -25,8 +25,9 @@ planında bile veri kaybı yaşanmaz.
 - 🗓️ IP başına günde belirli sayıda anı gönderme limiti (varsayılan 2, admin panelinden değiştirilebilir)
 - 📦 Fotoğraf/video boyutu sınırı — hem site geneli varsayılan hem **kullanıcıya özel** olarak admin panelinden ayarlanabilir; göndermeden önce tarayıcıda otomatik sıkıştırılır
 - 🛡️ **İki farklı admin rolü**: Moderatör (sadece onay/red/IP yasaklama, IP adreslerini göremez) ve Süper Admin (tüm yetkiler — ayarlar, kullanıcı limitleri, IP görme/yasağı kaldırma)
-- 👤 Gelişmiş profil sayfası: kendi anılarını görme/silme, "hakkımda" metni düzenleme, istatistikler, sınırların, şifre değiştirme
+- 👤 Modern, yeniden tasarlanmış profil sayfası: kendi anılarını görme/silme, "hakkımda" metni düzenleme, istatistikler, sınırların, şifre değiştirme
 - 🔗 **Herkese açık profiller** (`/u/kullaniciadi`): galerideki her isme tıklayarak birinin paylaştığı onaylı anıları ve toplam beğenisini görebilirsin
+- 🏅 **Rozetler** (süper admin panelinden verilir): 🏆 Site Kurucusu (sarı/lacivert) ve ❤️ CroShy (kırmızı/beyaz) rozeti sahibini **tüm sınırlardan** muaf tutar; ayrıca 👤 Üye, 🔥 Haftanın Aktifi, ⭐ Haftanın Beğenileni rozetleri — admin panelinde o haftanın en çok anı gönderen/en çok beğeni toplayan kullanıcıları gösteren bir liderlik tablosu bu rozetleri kime vereceğine karar vermene yardımcı olur
 - ❤️ Herkese açık beğeni sistemi + Önerilen / En Yeni / En Eski / En Çok Beğenilen sıralaması
 - 🧠 "Önerilen" akışı: önce hiç görmediğin anıları (en çok beğenilenden başlayarak), sonra gördüklerinin en yenisini gösterir
 - 🚫 Admin panelinden kural dışı içerik gönderen IP'yi yasaklama / yasağı kaldırma
@@ -162,9 +163,21 @@ Admin panel: http://localhost:3000/admin — iki farklı admin hesabıyla girile
   görür, şifresini değiştirebilir.
 - **Herkese açık profiller**: ana sayfadaki her anının altında gönderenin adı
   bir bağlantıdır — tıklayınca `/u/kullaniciadi` adresinde o kişinin herkese
-  açık profiline gidilir: kullanıcı adı, katılma tarihi, "hakkımda" metni
-  (varsa), sadece **onaylı** anıları ve toplam beğenisi gösterilir. Bekleyen
-  anılar, sınırlar ve IP gibi özel bilgiler bu sayfada asla görünmez.
+  açık profiline gidilir: kullanıcı adı, rozetleri, katılma tarihi, "hakkımda"
+  metni (varsa), sadece **onaylı** anıları ve toplam beğenisi gösterilir.
+  Bekleyen anılar, sınırlar ve IP gibi özel bilgiler bu sayfada asla görünmez.
+- **Rozetler**: süper admin panelindeki "Rozetler" bölümünden bir kullanıcı
+  adına şu rozetlerden biri verilebilir: 🏆 **Site Kurucusu**, ❤️ **CroShy**,
+  👤 **Üye**, 🔥 **Haftanın Aktifi**, ⭐ **Haftanın Beğenileni**. İlk iki
+  rozet (Site Kurucusu, CroShy) sahibini dosya boyutu, video süresi ve
+  günlük gönderim limiti dahil **tüm sınırlardan tamamen muaf tutar** —
+  profilinde bunun yerine "✨ sınırsız" bir bilgi kutusu görünür. Aynı
+  bölümde son 7 günün en çok anı gönderen ve en çok beğeni toplayan
+  kullanıcılarını gösteren bir liderlik tablosu vardır; bu tabloyu
+  "Haftanın Aktifi"/"Haftanın Beğenileni" rozetini kime vereceğine karar
+  vermek için referans olarak kullanabilirsin (rozetler otomatik verilmez,
+  sen seçip verirsin). Rozetler hem kendi profilinde hem herkese açık
+  profilinde renkli birer etiket olarak görünür.
 - Ana sayfa `GET /api/approved?sort=algorithm|newest|oldest|likes` isteğinde
   onaylı anıları çeker. **Varsayılan ("Önerilen") akış**: önce o ziyaretçinin
   (IP bazlı) hiç görmediği anılar — aralarında en çok beğenilen önde — sonra

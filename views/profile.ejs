@@ -61,36 +61,40 @@
     </nav>
   </header>
 
-  <div class="upload-wrap">
+  <div class="upload-wrap" style="max-width: 720px;">
     <span class="eyebrow">Hesabım</span>
-    <h1 style="margin: 14px 0 24px; font-size: 1.8rem;">Profilim</h1>
 
     <% if (error) { %>
-      <div class="login-error" style="margin-bottom:16px;"><%= error %></div>
+      <div class="login-error" style="margin: 14px 0;"><%= error %></div>
     <% } %>
     <% if (success) { %>
-      <div class="status-msg show ok" style="margin-bottom:16px;"><%= success %></div>
+      <div class="status-msg show ok" style="margin: 14px 0;"><%= success %></div>
     <% } %>
 
-    <div class="upload-card" style="margin-bottom: 20px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom: 18px; flex-wrap:wrap;">
-        <div style="display:flex; align-items:center; gap:14px;">
-          <div class="brand-mark-wrap" style="width:52px; height:52px;">
-            <div style="width:100%; height:100%; border-radius:9px; background:linear-gradient(135deg, var(--accent-1), var(--accent-2)); display:flex; align-items:center; justify-content:center; font-family:var(--font-head); font-weight:700; font-size:1.4rem; color:#fff;">
-              <%= username.charAt(0).toUpperCase() %>
-            </div>
+    <div class="upload-card" style="margin: 18px 0 20px;">
+      <div class="profile-hero">
+        <div class="profile-avatar"><%= username.charAt(0).toUpperCase() %></div>
+        <div class="profile-identity">
+          <div class="profile-name-row">
+            <span class="profile-name"><%= username %></span>
           </div>
-          <div>
-            <div style="font-family:var(--font-head); font-weight:700; font-size:1.25rem;"><%= username %></div>
-            <div style="color:var(--text-dim); font-size:0.85rem;">
-              <% if (createdAt) { %>Katılma: <%= new Date(createdAt).toLocaleDateString('tr-TR') %><% } %>
+          <% if (badges && badges.length > 0) { %>
+            <div class="badge-row">
+              <% BADGE_ORDER.forEach(function(code) { %>
+                <% if (badges.includes(code)) { %>
+                  <span class="badge-pill <%= BADGE_INFO[code].className %>"><%= BADGE_INFO[code].icon %> <%= BADGE_INFO[code].label %></span>
+                <% } %>
+              <% }) %>
             </div>
+          <% } %>
+          <div class="profile-joined"><% if (createdAt) { %>Katılma: <%= new Date(createdAt).toLocaleDateString('tr-TR') %><% } %></div>
+          <div class="profile-actions">
+            <a href="/u/<%= encodeURIComponent(username) %>" class="btn ghost small">Herkese Açık Halini Gör ↗</a>
           </div>
         </div>
-        <a href="/u/<%= username %>" class="btn ghost small">Herkese Açık Halini Gör ↗</a>
       </div>
 
-      <form method="POST" action="/profile/update-bio" style="margin-bottom: 20px;">
+      <form method="POST" action="/profile/update-bio" style="margin-top: 18px;">
         <div class="field" style="margin:0;">
           <label for="bio">Hakkımda (herkese açık profilinde görünür)</label>
           <textarea id="bio" name="bio" maxlength="160" placeholder="Kendinle ilgili birkaç kelime…" style="min-height:60px;"><%= bio %></textarea>
@@ -98,53 +102,60 @@
         <button type="submit" class="btn small" style="margin-top:10px;">Kaydet</button>
       </form>
 
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
-        <div style="text-align:center; background:rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:14px 8px;">
-          <div style="font-family:var(--font-head); font-weight:700; font-size:1.5rem;"><%= approvedCount %></div>
-          <div style="color:var(--text-dim); font-size:0.78rem;">Onaylı Anı</div>
+      <div class="profile-stats-grid" style="margin-top: 20px;">
+        <div class="profile-stat-card">
+          <div class="profile-stat-value"><%= approvedCount %></div>
+          <div class="profile-stat-label">Onaylı Anı</div>
         </div>
-        <div style="text-align:center; background:rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:14px 8px;">
-          <div style="font-family:var(--font-head); font-weight:700; font-size:1.5rem;"><%= pendingCount %></div>
-          <div style="color:var(--text-dim); font-size:0.78rem;">Onay Bekleyen</div>
+        <div class="profile-stat-card">
+          <div class="profile-stat-value"><%= pendingCount %></div>
+          <div class="profile-stat-label">Onay Bekleyen</div>
         </div>
-        <div style="text-align:center; background:rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:14px 8px;">
-          <div style="font-family:var(--font-head); font-weight:700; font-size:1.5rem;"><%= totalLikes %></div>
-          <div style="color:var(--text-dim); font-size:0.78rem;">Toplam Beğeni</div>
+        <div class="profile-stat-card">
+          <div class="profile-stat-value"><%= totalLikes %></div>
+          <div class="profile-stat-label">Toplam Beğeni</div>
         </div>
       </div>
     </div>
 
-    <div class="upload-card" style="margin-bottom: 20px;">
-      <h2 style="margin:0 0 4px; font-size:1.05rem;">Yükleme Sınırların</h2>
-      <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom: 14px;">
-        <% if (hasCustomLimits) { %>Admin tarafından senin için özel olarak ayarlanmış.<% } else { %>Site genelindeki varsayılan sınırlar geçerli.<% } %>
-      </p>
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size:0.85rem;">
-        <div>📷 Fotoğraf: <strong><%= (limits.imageBytes / (1024*1024)).toFixed(1) %> MB</strong></div>
-        <div>🎬 Video: <strong><%= (limits.videoBytes / (1024*1024)).toFixed(1) %> MB</strong></div>
-        <div>⏱️ Video süresi: <strong><%= Math.floor(limits.videoDurationSec/60) %>:<%= String(limits.videoDurationSec%60).padStart(2,'0') %></strong></div>
+    <% if (limits.unlimited) { %>
+      <div class="unlimited-banner">
+        <span class="icon">✨</span>
+        <span>Rozetin sayesinde hiçbir dosya boyutu, video süresi ya da günlük gönderim sınırına takılmıyorsun.</span>
       </div>
-    </div>
+    <% } else { %>
+      <div class="upload-card" style="margin-bottom: 20px;">
+        <h2 class="profile-section-title">📏 Yükleme Sınırların</h2>
+        <p class="profile-section-sub">
+          <% if (hasCustomLimits) { %>Admin tarafından senin için özel olarak ayarlanmış.<% } else { %>Site genelindeki varsayılan sınırlar geçerli.<% } %>
+        </p>
+        <div class="profile-limits-grid">
+          <div class="profile-limit-item">📷 Fotoğraf: <strong><%= (limits.imageBytes / (1024*1024)).toFixed(1) %> MB</strong></div>
+          <div class="profile-limit-item">🎬 Video: <strong><%= (limits.videoBytes / (1024*1024)).toFixed(1) %> MB</strong></div>
+          <div class="profile-limit-item">⏱️ Video süresi: <strong><%= Math.floor(limits.videoDurationSec/60) %>:<%= String(limits.videoDurationSec%60).padStart(2,'0') %></strong></div>
+        </div>
+      </div>
+    <% } %>
 
     <div class="upload-card" style="margin-bottom: 20px;">
-      <h2 style="margin:0 0 14px; font-size:1.05rem;">Anıların (<%= items.length %>)</h2>
+      <h2 class="profile-section-title">🖼️ Anıların (<%= items.length %>)</h2>
       <% if (items.length === 0) { %>
         <div class="empty-state">Henüz bir anı göndermedin.</div>
       <% } else { %>
-        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px;">
+        <div class="profile-grid">
           <% items.forEach(function(item) { %>
-            <div style="position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--card-border); aspect-ratio:1;">
+            <div class="profile-item-card">
               <% if (item.type === 'video') { %>
-                <video src="<%= item.url %>" muted loop autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+                <video src="<%= item.url %>" muted loop autoplay playsinline></video>
               <% } else { %>
-                <img src="<%= item.url %>" alt="" style="width:100%; height:100%; object-fit:cover;" />
+                <img src="<%= item.url %>" alt="" />
               <% } %>
-              <span style="position:absolute; top:6px; left:6px; background:rgba(0,0,0,0.55); color:#fff; font-size:0.65rem; padding:3px 7px; border-radius:999px;">
+              <span class="profile-item-status <%= item.status === 'approved' ? 'is-approved' : 'is-pending' %>">
                 <%= item.status === 'approved' ? '✓ Onaylı' : '⏳ Bekliyor' %>
               </span>
-              <span style="position:absolute; bottom:6px; left:6px; background:rgba(0,0,0,0.55); color:#fff; font-size:0.65rem; padding:3px 7px; border-radius:999px;">❤️ <%= item.likes %></span>
-              <form method="POST" action="/profile/delete/<%= item.id %>" onsubmit="return confirm('Bu anıyı silmek istediğine emin misin? Bu işlem geri alınamaz.');" style="position:absolute; top:6px; right:6px;">
-                <button type="submit" style="width:26px; height:26px; border-radius:50%; border:none; background:rgba(0,0,0,0.6); color:#fda4af; font-size:0.85rem; cursor:pointer;">✕</button>
+              <span class="profile-item-likes">❤️ <%= item.likes %></span>
+              <form method="POST" action="/profile/delete/<%= item.id %>" onsubmit="return confirm('Bu anıyı silmek istediğine emin misin? Bu işlem geri alınamaz.');" style="position:absolute; top:6px; right:6px; margin:0;">
+                <button type="submit" class="profile-item-delete" aria-label="Sil">✕</button>
               </form>
             </div>
           <% }) %>
@@ -153,7 +164,7 @@
     </div>
 
     <div class="upload-card">
-      <h2 style="margin:0 0 14px; font-size:1.05rem;">Şifreni Değiştir</h2>
+      <h2 class="profile-section-title">🔒 Şifreni Değiştir</h2>
       <form method="POST" action="/profile/change-password">
         <div class="field">
           <label for="currentPassword">Mevcut şifre</label>
