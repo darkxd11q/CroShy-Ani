@@ -141,29 +141,27 @@ async function listUsersWithBadges() {
 // rozetini kime vereceğine karar vermesi için referans listesi.
 async function getWeeklyLeaderboard() {
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const { data, error } = await supabase
-    .from('items')
-    .select('id, uploader_name, user_id, status, created_at')
-    .gt('created_at', cutoff);
-  if (error) throw error;
 
-  const items = data || [];
+  // İki sorgu birbirine bağımlı değilmiş gibi PARALEL çalıştırılıyor (tüm
+  // beğenileri çekip eşleştirmeyi JS tarafında yapıyoruz) — art arda iki ağ
+  // isteği yerine tek bir bekleme süresi, admin panelini belirgin hızlandırır.
+  const [itemsRes, likesRes] = await Promise.all([
+    supabase.from('items').select('id, uploader_name, status, created_at').gt('created_at', cutoff),
+    supabase.from('likes').select('item_id'),
+  ]);
+  if (itemsRes.error) throw itemsRes.error;
+  if (likesRes.error) throw likesRes.error;
+
+  const items = itemsRes.data || [];
+  const likeRows = likesRes.data || [];
+
   const submissionCounts = {};
   for (const item of items) {
-    const key = item.uploader_name;
-    submissionCounts[key] = (submissionCounts[key] || 0) + 1;
-  }
-
-  const approvedIds = items.filter((i) => i.status === 'approved').map((i) => i.id);
-  let likeRows = [];
-  if (approvedIds.length > 0) {
-    const { data, error: likeErr } = await supabase.from('likes').select('item_id').in('item_id', approvedIds);
-    if (likeErr) throw likeErr;
-    likeRows = data || [];
+    submissionCounts[item.uploader_name] = (submissionCounts[item.uploader_name] || 0) + 1;
   }
 
   const likesByItem = {};
-  for (const row of likeRows || []) {
+  for (const row of likeRows) {
     likesByItem[row.item_id] = (likesByItem[row.item_id] || 0) + 1;
   }
   const likeCounts = {};

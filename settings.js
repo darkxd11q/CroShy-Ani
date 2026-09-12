@@ -16,11 +16,24 @@ function fromRow(row) {
   };
 }
 
+// Ayarlar hemen her istekte (yükleme sayfası açılışı, her gönderim vb.)
+// okunuyor ama nadiren değişiyor — bu yüzden kısa süreli bir bellek içi
+// önbellek kullanıyoruz. Admin bir ayarı değiştirdiğinde önbellek hemen
+// güncellenir, yani admin kendi değişikliğini asla bayat görmez; diğer
+// isteklerde en fazla birkaç saniyelik bir gecikmeyle yeni değer geçerli olur.
+let cache = null;
+let cacheAt = 0;
+const CACHE_MS = 20_000;
+
 async function getSettings() {
+  if (cache && Date.now() - cacheAt < CACHE_MS) return cache;
+
   const { data, error } = await supabase.from('app_settings').select('*').eq('id', 1).maybeSingle();
   if (error) throw error;
-  if (!data) return { ...DEFAULTS };
-  return fromRow(data);
+
+  cache = data ? fromRow(data) : { ...DEFAULTS };
+  cacheAt = Date.now();
+  return cache;
 }
 
 async function updateSettings({ dailySubmitLimit, maxImageBytes, maxVideoBytes, maxVideoDurationSec }) {
@@ -32,7 +45,13 @@ async function updateSettings({ dailySubmitLimit, maxImageBytes, maxVideoBytes, 
 
   const { data, error } = await supabase.from('app_settings').update(patch).eq('id', 1).select().maybeSingle();
   if (error) throw error;
-  return data ? fromRow(data) : null;
+
+  const updated = data ? fromRow(data) : null;
+  if (updated) {
+    cache = updated;
+    cacheAt = Date.now();
+  }
+  return updated;
 }
 
 module.exports = { getSettings, updateSettings, DEFAULTS };

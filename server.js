@@ -113,18 +113,15 @@ function getCookie(req, name) {
   return null;
 }
 
-async function issueRememberCookie(res, { subjectType, subjectId, username, role }) {
+// Çerezi HEMEN (senkron) ayarlar, Supabase'e yazmayı arka planda yapar.
+// Böylece giriş/kayıt sırasında kullanıcı ekstra bir ağ isteğini beklemek
+// zorunda kalmaz — bu, admin/kullanıcı girişindeki en büyük gecikme
+// kaynağıydı. Arka plan yazması başarısız olsa bile giriş etkilenmez;
+// tek sonucu o oturum için "beni hatırla"nın çalışmaması olur.
+function issueRememberCookie(res, { subjectType, subjectId, username, role }) {
   const raw = crypto.randomBytes(32).toString('hex');
   const tokenHash = sha256(raw);
-  await rememberTokens.create({
-    tokenHash,
-    subjectType,
-    subjectId,
-    username,
-    role: role || null,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + REMEMBER_MS,
-  });
+
   res.cookie(REMEMBER_COOKIE, raw, {
     httpOnly: true,
     sameSite: 'strict',
@@ -132,6 +129,18 @@ async function issueRememberCookie(res, { subjectType, subjectId, username, role
     maxAge: REMEMBER_MS,
     path: '/',
   });
+
+  rememberTokens
+    .create({
+      tokenHash,
+      subjectType,
+      subjectId,
+      username,
+      role: role || null,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + REMEMBER_MS,
+    })
+    .catch((e) => console.error('remember token oluşturma hatası (arka plan):', e.message));
 }
 
 async function clearRememberCookie(req, res) {
@@ -178,16 +187,12 @@ app.use(async (req, res, next) => {
         req.session.username = record.username;
         req.session.justAutoLoggedIn = true;
 
-        try {
-          await issueRememberCookie(res, {
-            subjectType: record.subjectType,
-            subjectId: record.subjectId,
-            username: record.username,
-            role: record.role,
-          });
-        } catch (e) {
-          console.error('remember token yenileme hatası:', e.message);
-        }
+        issueRememberCookie(res, {
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          username: record.username,
+          role: record.role,
+        });
         next();
       } catch (e) {
         console.error('Otomatik giriş kurulum hatası:', e.message);
@@ -417,17 +422,20 @@ app.post(
   asyncRoute(async (req, res) => {
     const ip = req.ip;
 
-    if (await bans.isBanned(ip)) {
+    // Bu dördü birbirinden bağımsız, tek tek beklemek yerine paralel çalıştır.
+    const [banned, uploader, globalSettings, usedToday] = await Promise.all([
+      bans.isBanned(ip),
+      users.findUserById(req.session.userId),
+      getSettingsSafe(),
+      logs.countToday(ip),
+    ]);
+
+    if (banned) {
       return res.status(403).json({ error: 'Bu IP adresinin anı gönderme yetkisi kaldırılmış.' });
     }
 
-    const [uploader, globalSettings] = await Promise.all([
-      users.findUserById(req.session.userId),
-      getSettingsSafe(),
-    ]);
     const limits = effectiveLimitsFor(uploader, globalSettings);
 
-    const usedToday = await logs.countToday(ip);
     if (usedToday >= limits.dailyLimit) {
       return res.status(429).json({
         error: `Bugün için gönderme hakkını doldurdun (günde en fazla ${limits.dailyLimit} anı). Yarın tekrar deneyebilirsin.`,
@@ -504,8 +512,7 @@ app.post(
       status: 'pending',
       createdAt: Date.now(),
     };
-    await db.insertItem(item);
-    await logs.recordSubmission(ip);
+    await Promise.all([db.insertItem(item), logs.recordSubmission(ip)]);
 
     res.json({ ok: true, item: { ...item, ip: undefined } });
   })
@@ -553,11 +560,7 @@ app.post(
         if (err) return res.render('login', { error: 'Bir hata oluştu, tekrar dene.' });
         req.session.userId = user.id;
         req.session.username = user.username;
-        try {
-          await issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
-        } catch (e) {
-          console.error('remember token oluşturma hatası:', e.message);
-        }
+        issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
         res.redirect('/upload');
       } catch (e) {
         console.error('Giriş sonrası hata:', e.message);
@@ -616,11 +619,7 @@ app.post(
         if (err) return res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });
         req.session.userId = user.id;
         req.session.username = user.username;
-        try {
-          await issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
-        } catch (e) {
-          console.error('remember token oluşturma hatası:', e.message);
-        }
+        issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
         res.redirect('/upload');
       } catch (e) {
         console.error('Kayıt sonrası hata:', e.message);
@@ -692,16 +691,12 @@ app.post(
         req.session.isAdmin = true;
         req.session.adminRole = matchedRole;
         req.session.username = loggedInUsername;
-        try {
-          await issueRememberCookie(res, {
-            subjectType: 'admin',
-            subjectId: 'admin',
-            username: loggedInUsername,
-            role: matchedRole,
-          });
-        } catch (e) {
-          console.error('remember token oluşturma hatası:', e.message);
-        }
+        issueRememberCookie(res, {
+          subjectType: 'admin',
+          subjectId: 'admin',
+          username: loggedInUsername,
+          role: matchedRole,
+        });
         res.redirect('/admin');
       } catch (e) {
         console.error('Admin girişi sonrası hata:', e.message);
@@ -983,8 +978,10 @@ async function buildOwnProfileData(userId, username) {
 
   const approvedItems = myItems.filter((i) => i.status === 'approved');
   const pendingCount = myItems.filter((i) => i.status === 'pending').length;
-  const totalLikes = await likes.countLikesForItemIds(approvedItems.map((i) => i.id));
+  // Tüm beğeni sayılarını tek seferde çekip kendi anılarınkileri topluyoruz —
+  // ayrı bir "toplam beğeni" sorgusuna gerek kalmıyor.
   const likeCounts = await likes.getAllCounts();
+  const totalLikes = approvedItems.reduce((sum, i) => sum + (likeCounts[i.id] || 0), 0);
   const limits = effectiveLimitsFor(user, globalSettings);
 
   const items = myItems.map((i) => ({ ...i, likes: likeCounts[i.id] || 0 }));
