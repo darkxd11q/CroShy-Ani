@@ -32,15 +32,9 @@ cloudinary.config({
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
-// NOT: Sabit limit değerleri kaldırıldı — artık hepsi admin panelinden
-// değiştirilebilen "app_settings" tablosunda (bkz. settings.js) ve
-// kullanıcıya özel override'lar "app_users" tablosunda tutuluyor.
-// Supabase'e ulaşılamazsa (yapılandırılmamışsa) diye makul varsayılanlar:
+
 const FALLBACK_SETTINGS = settings.DEFAULTS;
 
-// Admin panelinden verilebilen sabit rozet seti. "founder" ve "croshy"
-// FULL_EXEMPT_BADGES ile eşleşir (bkz. effectiveLimitsFor) — sahibi tüm
-// sınırlardan muaf olur. Sırası profil sayfalarında gösterilme sırasıdır.
 const BADGE_INFO = {
   founder: { label: 'Site Kurucusu', icon: '🏆', className: 'badge-founder' },
   croshy: { label: 'CroShy', icon: '❤️', className: 'badge-croshy' },
@@ -50,12 +44,6 @@ const BADGE_INFO = {
 };
 const BADGE_ORDER = ['founder', 'croshy', 'weekly_active', 'weekly_liked', 'member'];
 
-// "trust proxy" SADECE üretimde (Render'ın tek katmanlı ters proxy'si arkasında)
-// açık olmalı. Yerelde (npm start ile doğrudan çalıştırırken) bunu açık
-// bırakmak, herkesin sahte bir X-Forwarded-For başlığıyla IP'sini
-// değiştirebilmesine (spoof) izin verir — bu da admin panelindeki IP
-// adreslerinin yanlış/güvenilmez görünmesine yol açan asıl sebepti.
-// NODE_ENV=production Render'da otomatik ayarlanır.
 app.set('trust proxy', isProd ? 1 : false);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -80,13 +68,6 @@ app.use(
   })
 );
 
-// ---------- "Beni hatırla" / otomatik giriş ----------
-// Oturum çerezi (üstteki) kasıtlı olarak kısa ömürlü (8 saat) — güvenlik
-// için. Ama kullanıcı bir kere giriş yaptıktan sonra tarayıcıyı kapatıp
-// tekrar açtığında yeniden şifre girmesin diye, AYRI ve çok daha uzun ömürlü
-// (90 gün) bir "hatırlama" çerezi + Supabase'de tuttuğumuz hash'lenmiş bir
-// token kullanıyoruz. Oturum süresi dolduğunda ama hatırlama çerezi hâlâ
-// geçerliyse, aşağıdaki middleware sessizce yeni bir oturum açar.
 const REMEMBER_COOKIE = 'croshy_remember';
 const REMEMBER_MS = 90 * 24 * 60 * 60 * 1000; // 90 gün
 
@@ -113,11 +94,6 @@ function getCookie(req, name) {
   return null;
 }
 
-// Çerezi HEMEN (senkron) ayarlar, Supabase'e yazmayı arka planda yapar.
-// Böylece giriş/kayıt sırasında kullanıcı ekstra bir ağ isteğini beklemek
-// zorunda kalmaz — bu, admin/kullanıcı girişindeki en büyük gecikme
-// kaynağıydı. Arka plan yazması başarısız olsa bile giriş etkilenmez;
-// tek sonucu o oturum için "beni hatırla"nın çalışmaması olur.
 function issueRememberCookie(res, { subjectType, subjectId, username, role }) {
   const raw = crypto.randomBytes(32).toString('hex');
   const tokenHash = sha256(raw);
@@ -155,10 +131,6 @@ async function clearRememberCookie(req, res) {
   res.clearCookie(REMEMBER_COOKIE, { path: '/' });
 }
 
-// Her istekte: aktif bir oturum yoksa ama geçerli bir "hatırlama" çerezi
-// varsa, sessizce oturumu yeniden kur. Token tek kullanımlıktır (kullanılınca
-// hemen yenisiyle değiştirilir) — biri bu çerezi çalarsa eski token zaten
-// geçersizleşmiş olur ve kullanıcı bir sonraki ziyaretinde fark edebilir.
 app.use(async (req, res, next) => {
   if (req.session && (req.session.userId || req.session.isAdmin)) return next();
 
@@ -205,7 +177,6 @@ app.use(async (req, res, next) => {
   }
 });
 
-// Her giriş/kayıt formu kendi bağımsız brute-force sayaçlarını kullanır
 const adminGuard = createLoginGuard();
 const userGuard = createLoginGuard();
 
@@ -225,9 +196,6 @@ const registerLimiter = createRateLimiter({
   message: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar dene.',
 });
 
-// Async route handler'larda try/catch tekrarını önlemek için küçük bir sarmalayıcı.
-// Bir Supabase isteği patlarsa 500 + JSON hata döner (HTML hata sayfası değil,
-// aksi halde fetch() tarafında yine "Unexpected token '<'" hatasına düşülür).
 function asyncRoute(handler) {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch((err) => {
@@ -252,8 +220,6 @@ async function getSettingsSafe() {
   }
 }
 
-// "Site Kurucusu" ve "CroShy" rozetine sahip kullanıcılar sitedeki HİÇBİR
-// sınıra (dosya boyutu, video süresi, günlük gönderim limiti) takılmaz.
 const FULL_EXEMPT_BADGES = ['founder', 'croshy'];
 const NO_LIMIT = Number.MAX_SAFE_INTEGER;
 
@@ -261,9 +227,6 @@ function hasFullExemption(user) {
   return !!(user && Array.isArray(user.badges) && user.badges.some((b) => FULL_EXEMPT_BADGES.includes(b)));
 }
 
-// Bir kullanıcı için geçerli olan (kişiye özelse onu, yoksa genel ayarı
-// kullanan) fiili sınırları hesaplar. Muaf tutan bir rozeti varsa tüm
-// sınırlar kaldırılır.
 function effectiveLimitsFor(user, globalSettings) {
   if (hasFullExemption(user)) {
     return { imageBytes: NO_LIMIT, videoBytes: NO_LIMIT, videoDurationSec: NO_LIMIT, dailyLimit: NO_LIMIT, unlimited: true };
@@ -277,24 +240,16 @@ function effectiveLimitsFor(user, globalSettings) {
   };
 }
 
-// ---------- Yardımcı middleware'ler ----------
-
 function requireAdminPage(req, res, next) {
   if (req.session && req.session.isAdmin) return next();
   return res.redirect('/admin/login');
 }
 
-// API/fetch istekleri için: oturum yoksa HTML login sayfasına yönlendirmek yerine
-// JSON 401 döner. Aksi halde fetch(), redirect'i takip edip HTML sayfası alır ve
-// res.json() "Unexpected token '<'" hatasıyla patlar — asıl hatanın kaynağı buydu.
 function requireAdminApi(req, res, next) {
   if (req.session && req.session.isAdmin) return next();
   return res.status(401).json({ error: 'Oturumun sona ermiş. Lütfen tekrar giriş yap.', loginRequired: true });
 }
 
-// Sadece tam yetkili admin ("superadmin") kullanabilir — moderatör hesabı
-// onay/red/IP-yasaklama dışındaki hiçbir işlemi (ayarlar, kullanıcı
-// limitleri, yasağı kaldırma) yapamaz.
 function requireSuperAdminApi(req, res, next) {
   if (req.session && req.session.isAdmin && req.session.adminRole === 'superadmin') return next();
   if (req.session && req.session.isAdmin) {
@@ -312,8 +267,6 @@ function requireUserApi(req, res, next) {
   if (req.session && req.session.userId) return next();
   return res.status(401).json({ error: 'Bu işlem için giriş yapmalısın.', loginRequired: true });
 }
-
-// ---------- Herkese açık API ----------
 
 app.get(
   '/api/config',
@@ -355,8 +308,6 @@ app.get(
     } else if (sort === 'newest') {
       approved.sort((a, b) => b.createdAt - a.createdAt);
     } else {
-      // "Önerilen" akışı: önce hiç görmediğin anılar (aralarında en çok
-      // beğenilen önde), görmediğin kalmadıysa gördüklerinden en yeni olan.
       const seen = await viewsStore.getSeenSetForIp(ip);
       const unseen = approved.filter((i) => !seen.has(i.id));
       const alreadySeen = approved.filter((i) => seen.has(i.id));
@@ -367,8 +318,6 @@ app.get(
       approved = [...unseen, ...alreadySeen];
     }
 
-    // Bu istekle dönen anılar artık bu IP için "görüldü" sayılır — bir sonraki
-    // ziyarette akış yeni/görülmemiş anılara öncelik verebilsin diye.
     viewsStore.markSeen(approved.map((i) => i.id), ip).catch((e) => {
       console.error('markSeen hatası:', e.message);
     });
@@ -377,7 +326,6 @@ app.get(
   })
 );
 
-// Bir anıyı beğen / beğeniyi geri al (herkese açık, IP başına 1 beğeni)
 app.post(
   '/api/like/:id',
   asyncRoute(async (req, res) => {
@@ -389,7 +337,6 @@ app.post(
   })
 );
 
-// Giriş yapmış kullanıcının kendi bilgisi + günlük kalan hakkı + fiili sınırları
 app.get(
   '/api/me',
   requireUserApi,
@@ -422,7 +369,6 @@ app.post(
   asyncRoute(async (req, res) => {
     const ip = req.ip;
 
-    // Bu dördü birbirinden bağımsız, tek tek beklemek yerine paralel çalıştır.
     const [banned, uploader, globalSettings, usedToday] = await Promise.all([
       bans.isBanned(ip),
       users.findUserById(req.session.userId),
@@ -455,8 +401,6 @@ app.post(
       return res.status(400).json({ error: 'Geçersiz medya kaynağı.' });
     }
     if (!cleanCaption) {
-      // Boş açıklamayla gönderilen medyayı (client atlatılmış olsa bile)
-      // Cloudinary'den de sil, öylece Supabase dışında yetim kalmasın.
       try {
         await cloudinary.uploader.destroy(publicId, { resource_type: type });
       } catch (e) {
@@ -465,10 +409,6 @@ app.post(
       return res.status(400).json({ error: 'Açıklama yazman zorunlu.' });
     }
 
-    // Dosya boyutu sınırı — kullanıcıya özel bir değer varsa o, yoksa genel
-    // ayar geçerlidir. "bytes" Cloudinary'nin yükleme sonrası döndürdüğü
-    // gerçek dosya boyutudur; client tarafındaki sıkıştırma/kontroller
-    // atlatılsa bile burada yakalanır.
     const sizeLimit = type === 'video' ? limits.videoBytes : limits.imageBytes;
 
     if (typeof bytes === 'number' && bytes > sizeLimit) {
@@ -483,9 +423,6 @@ app.post(
       });
     }
 
-    // Video süresi sınırı — kullanıcıya özel bir değer varsa o, yoksa genel
-    // ayar geçerlidir. Client tarafında kırpma denenir, ama Cloudinary'nin
-    // döndürdüğü gerçek süre burada son kez doğrulanır.
     if (type === 'video' && typeof durationSec === 'number' && durationSec > limits.videoDurationSec + 2) {
       try {
         await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
@@ -503,8 +440,6 @@ app.post(
       url,
       publicId,
       type,
-      // İsim her zaman oturum açmış kullanıcıdan alınır, client'tan gelen
-      // herhangi bir isim asla güvenilmez / kullanılmaz.
       uploaderName: req.session.username,
       userId: req.session.userId,
       ip,
@@ -518,10 +453,7 @@ app.post(
   })
 );
 
-// ---------- Kullanıcı girişi / kaydı ----------
-
 app.get('/login', (req, res) => {
-  // Otomatik giriş middleware'i bu isteğe kadar oturumu zaten kurmuş olabilir
   if (req.session && req.session.userId) return res.redirect('/upload');
   res.render('login', { error: null });
 });
@@ -552,10 +484,6 @@ app.post(
     userGuard.resetAttempts(ip);
 
     req.session.regenerate(async (err) => {
-      // Bu callback'in tamamı kasıtlı olarak try/catch ile sarılı — session
-      // kütüphanesi bu callback'i "ateşle ve unut" şekilde çağırıyor, yani
-      // içeride yakalanmayan bir hata dışarıdaki asyncRoute/middleware
-      // zincirine hiç ulaşmıyor ve istek hiç yanıtlanmadan asılı kalabiliyordu.
       try {
         if (err) return res.render('login', { error: 'Bir hata oluştu, tekrar dene.' });
         req.session.userId = user.id;
@@ -667,9 +595,6 @@ app.post(
     const superUsername = process.env.SUPERADMIN_USERNAME || 'dxrks91';
     const superPassword = process.env.SUPERADMIN_PASSWORD || '';
 
-    // İki farklı admin hesabından hangisiyle eşleştiğini bul. Önce kullanıcı
-    // adına bakılır (moderatör hesabıyla aynı isim/şifre kalıyor, sadece
-    // yetkileri kısıtlı — bkz. requireSuperAdminApi ve admin.ejs).
     let matchedRole = null;
     if (safeStringEqual(username, modUsername) && verifyPassword(password, modPassword)) {
       matchedRole = 'moderator';
@@ -717,8 +642,6 @@ app.post(
   })
 );
 
-// Herhangi bir sayfa yükünde çağrılıp "otomatik giriş yapıldı" bilgisini
-// bir kereliğine döndüren, herkese açık uç nokta (giriş şart değil).
 app.get('/api/session-status', (req, res) => {
   const justAuto = !!(req.session && req.session.justAutoLoggedIn);
   if (req.session && justAuto) req.session.justAutoLoggedIn = false;
@@ -736,9 +659,6 @@ app.get(
   asyncRoute(async (req, res) => {
     const isSuperAdmin = req.session.adminRole === 'superadmin';
 
-    // Moderatör hesabı için IP listesi/genel ayarlar/kullanıcı limitleri/
-    // rozetler hiç çekilmiyor bile — hem gereksiz Supabase isteği yapılmasın
-    // hem de bu veriler yanlışlıkla template'e sızmasın diye.
     const [pending, approvedCount, banList, customLimitUsers, globalSettings, badgeUsers, weeklyLeaderboard] =
       await Promise.all([
         db.getPendingItems(),
@@ -761,12 +681,11 @@ app.get(
       badgeUsers,
       weeklyLeaderboard,
       BADGE_INFO,
+      BADGE_ORDER, // <-- DÜZELTME HERE: Bu satır eklendi!
     });
   })
 );
 
-// Site geneli varsayılan ayarları güncelle (günlük limit, boyut/süre sınırları)
-// — sadece tam yetkili admin.
 app.post(
   '/api/admin/settings',
   requireSuperAdminApi,
@@ -800,9 +719,6 @@ app.post(
   })
 );
 
-// Belirli bir kullanıcı için özel dosya boyutu/süre sınırları belirle.
-// Bir alan boş bırakılırsa o alan genel ayara döner (null yapılır).
-// — sadece tam yetkili admin.
 app.post(
   '/api/admin/user-limits',
   requireSuperAdminApi,
@@ -849,8 +765,6 @@ app.post(
   })
 );
 
-// Rozet ver / kaldır — sadece tam yetkili admin. "founder"/"croshy" rozeti
-// sahibini tüm sınırlardan muaf tutar (bkz. effectiveLimitsFor).
 app.post(
   '/api/admin/badges/grant',
   requireSuperAdminApi,
@@ -879,8 +793,6 @@ app.post(
   })
 );
 
-// Onaylama, reddetme ve IP yasaklama — hem moderatör hem tam yetkili admin
-// kullanabilir.
 app.post(
   '/api/admin/approve/:id',
   requireAdminApi,
@@ -913,10 +825,6 @@ app.post(
   })
 );
 
-// Bir öğeyi reddedip gönderen IP'yi yasaklar; aynı IP'den bekleyen diğer
-// tüm gönderiler de temizlenir. Moderatör bu işlemi yapabilir AMA gerçek
-// IP adresini asla response'da görmez — sadece işlem sonucu (ok/removedCount)
-// döner, ip alanı bilerek dahil edilmez.
 app.post(
   '/api/admin/ban/:id',
   requireAdminApi,
@@ -945,7 +853,6 @@ app.post(
   })
 );
 
-// Yasağı kaldırma — sadece tam yetkili admin (moderatör IP'yi zaten göremiyor).
 app.post(
   '/api/admin/unban',
   requireSuperAdminApi,
@@ -967,8 +874,6 @@ app.get('/upload', requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, 'protected', 'upload.html'));
 });
 
-// Bir kullanıcının profil sayfası için gereken tüm veriyi tek yerden toplar
-// (kendi profili — pending dahil tüm anıları + limitleri + bio görür).
 async function buildOwnProfileData(userId, username) {
   const [user, myItems, globalSettings] = await Promise.all([
     users.findUserById(userId),
@@ -978,8 +883,6 @@ async function buildOwnProfileData(userId, username) {
 
   const approvedItems = myItems.filter((i) => i.status === 'approved');
   const pendingCount = myItems.filter((i) => i.status === 'pending').length;
-  // Tüm beğeni sayılarını tek seferde çekip kendi anılarınkileri topluyoruz —
-  // ayrı bir "toplam beğeni" sorgusuna gerek kalmıyor.
   const likeCounts = await likes.getAllCounts();
   const totalLikes = approvedItems.reduce((sum, i) => sum + (likeCounts[i.id] || 0), 0);
   const limits = effectiveLimitsFor(user, globalSettings);
@@ -1051,7 +954,6 @@ app.post(
   })
 );
 
-// Kendi gönderdiğin bir anıyı (bekleyen ya da onaylı) tamamen sil.
 app.post(
   '/profile/delete/:id',
   requireUserPage,
@@ -1069,15 +971,11 @@ app.post(
       await likes.removeAllForItem(item.id);
       await viewsStore.removeAllForItem(item.id);
     }
-    // item bulunamadıysa ya da başkasına aitse sessizce yok say — kendi
-    // anılarının kimliğini/id'sini bilmeyen biri başkasının anısını silemez.
     const data = await buildOwnProfileData(req.session.userId, req.session.username);
     res.render('profile', { ...data, success: 'Anı silindi.' });
   })
 );
 
-// Herkese açık profil — sadece onaylı anılar, sadece herkese açık bilgiler
-// (bekleyen sayısı, sınırlar, IP gibi özel bilgiler asla gösterilmez).
 app.get(
   '/u/:username',
   asyncRoute(async (req, res) => {
@@ -1106,7 +1004,6 @@ app.get(
   })
 );
 
-// 404 - her zaman en sonda
 app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
 });
