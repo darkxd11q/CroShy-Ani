@@ -163,6 +163,33 @@ document.querySelectorAll('#badges-list [data-action="revoke-badge"]').forEach((
   });
 });
 
+// Onaylı bir anıyı kaldırma butonları
+document.querySelectorAll('#approved-list [data-action="delete-approved"]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    if (!confirm('Bu anı yayından tamamen kaldırılsın mı? Bu işlem geri alınamaz.')) return;
+    btn.disabled = true;
+    const card = btn.closest('[data-id-row]');
+    try {
+      await adminFetch(`/api/admin/delete-approved/${btn.dataset.id}`, { method: 'POST' });
+      if (card) {
+        card.style.transition = 'opacity 0.3s, transform 0.3s';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.9)';
+        setTimeout(() => {
+          card.remove();
+          const list = document.getElementById('approved-list');
+          if (list && !list.querySelector('[data-id-row]')) {
+            list.innerHTML = '<div class="empty-state">Henüz onaylı bir anı yok</div>';
+          }
+        }, 300);
+      }
+    } catch (err) {
+      alert('Hata: ' + err.message);
+      btn.disabled = false;
+    }
+  });
+});
+
 async function handlePendingAction(id, action, btn) {
   const item = btn.closest('.pending-item');
   const buttons = item.querySelectorAll('button');

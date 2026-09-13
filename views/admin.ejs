@@ -110,6 +110,31 @@
     <% if (adminRole === 'superadmin') { %>
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
+        <h2 style="margin:0;">Onaylı Anılar</h2>
+        <div class="admin-stat"><%= approvedItems.length %> anı yayında — gerekirse buradan kaldırabilirsin</div>
+      </div>
+    </div>
+
+    <div class="profile-grid" id="approved-list" style="margin-bottom: 20px;">
+      <% if (approvedItems.length === 0) { %>
+        <div class="empty-state">Henüz onaylı bir anı yok</div>
+      <% } %>
+      <% approvedItems.forEach(function(item) { %>
+        <div class="profile-item-card" data-id-row="<%= item.id %>">
+          <% if (item.type === 'video') { %>
+            <video src="<%= item.url %>" muted loop autoplay playsinline></video>
+          <% } else { %>
+            <img src="<%= item.url %>" alt="" />
+          <% } %>
+          <span class="profile-item-status is-approved"><%= item.uploaderName %></span>
+          <span class="profile-item-likes">❤️ <%= item.likes %></span>
+          <button type="button" class="profile-item-delete" data-action="delete-approved" data-id="<%= item.id %>" aria-label="Sil" title="Bu anıyı kaldır">✕</button>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
         <h2 style="margin:0;">Yasaklı IP'ler</h2>
         <div class="admin-stat"><%= bans.length %> IP adresi yasaklı — anı gönderemez (görüntüleme etkilenmez)</div>
       </div>
