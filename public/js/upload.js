@@ -17,6 +17,10 @@ const trimEndLabel = document.getElementById('trimEndLabel');
 const trimTotalLabel = document.getElementById('trimTotalLabel');
 const trimMaxLenLabel = document.getElementById('trimMaxLenLabel');
 
+// Çok uzun videoları "kırpacağım" diyerek sınırsız depolamayı önlemek için
+// makul bir üst sınır — sadece muaf olmayan hesaplar için geçerli.
+const ABSOLUTE_VIDEO_CEILING_BYTES = 300 * 1024 * 1024; // 300 MB
+
 let selectedFile = null;
 let config = null;
 let remainingToday = null;
@@ -33,6 +37,20 @@ function formatTime(sec) {
   const m = Math.floor(s / 60);
   const r = s % 60;
   return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+// Cloudinary'nin yükleme sonrası döndürdüğü URL'ye "so_/du_" (başlangıç/uzunluk)
+// parametresi ekleyerek videoyu SUNUCU TARAFINDA kırpılmış şekilde servis
+// ettirir. Tarayıcıda yeniden kodlama yapmadığımız için bozulma riski yok.
+function buildTrimmedVideoUrl(secureUrl, startSec, lengthSec) {
+  const marker = '/upload/';
+  const idx = secureUrl.indexOf(marker);
+  if (idx === -1) return secureUrl;
+  const before = secureUrl.slice(0, idx + marker.length);
+  const after = secureUrl.slice(idx + marker.length);
+  const so = Math.max(0, Math.round(startSec));
+  const du = Math.max(1, Math.round(lengthSec));
+  return `${before}so_${so},du_${du}/${after}`;
 }
 
 // Giriş kontrolü + kalan günlük hak bilgisi + fiili sınırlar
@@ -197,58 +215,50 @@ form.addEventListener('submit', async (e) => {
   const isVideo = selectedFile.type.startsWith('video/');
   const resourceType = isVideo ? 'video' : 'image';
   const sizeLimit = myLimits ? (isVideo ? myLimits.maxVideoBytes : myLimits.maxImageBytes) : (isVideo ? config.maxVideoBytes : config.maxImageBytes);
-  const durationLimit = myLimits ? myLimits.maxVideoDurationSec : config.maxVideoDurationSec;
-
-  submitBtn.disabled = true;
+  const unlimited = !!(myLimits && myLimits.unlimited);
 
   let fileToUpload = selectedFile;
 
-  if (isVideo && needsTrim) {
-    submitBtn.textContent = 'Video kırpılıyor…';
-    showStatus('Seçtiğin bölüm hazırlanıyor…', 'info');
-    const trimmed = await compressVideo(selectedFile, sizeLimit, {
-      trimStart: Number(trimStartSlider.value),
-      trimDuration: Number(trimLengthSlider.value),
-      onProgress: (pct) => showStatus(`Video hazırlanıyor… %${pct}`, 'info'),
-    });
-
-    if (!trimmed) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Onaya Gönder';
-      showStatus(
-        'Tarayıcın video kırpmayı desteklemiyor. Lütfen videoyu göndermeden önce başka bir uygulamayla kısalt.',
-        'err'
-      );
-      return;
-    }
-    fileToUpload = trimmed;
-  } else {
+  if (!isVideo) {
+    // Fotoğraf: eskisi gibi tarayıcıda güvenle sıkıştırabiliyoruz.
+    submitBtn.disabled = true;
     try {
-      if (isVideo) {
-        submitBtn.textContent = 'Video sıkıştırılıyor…';
-        showStatus('Video sıkıştırılıyor, bu biraz sürebilir…', 'info');
-        fileToUpload = await compressVideo(selectedFile, sizeLimit, {
-          onProgress: (pct) => showStatus(`Video sıkıştırılıyor… %${pct}`, 'info'),
-        });
-      } else {
-        submitBtn.textContent = 'Fotoğraf sıkıştırılıyor…';
-        showStatus('Fotoğraf sıkıştırılıyor…', 'info');
-        fileToUpload = await compressImage(selectedFile, sizeLimit);
-      }
+      submitBtn.textContent = 'Fotoğraf sıkıştırılıyor…';
+      showStatus('Fotoğraf sıkıştırılıyor…', 'info');
+      fileToUpload = await compressImage(selectedFile, sizeLimit);
     } catch {
-      fileToUpload = selectedFile; // sıkıştırma başarısız olursa orijinali dene
+      fileToUpload = selectedFile;
     }
-
-    if (fileToUpload.size > sizeLimit) {
+    if (!unlimited && fileToUpload.size > sizeLimit) {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Onaya Gönder';
-      progressBar.style.display = 'none';
       showStatus(
-        `Dosya, sıkıştırma sonrasında bile ${isVideo ? 'video' : 'fotoğraf'} sınırı olan ${formatMb(sizeLimit)}'ı aşıyor (${formatMb(fileToUpload.size)}). Lütfen daha küçük/kısa bir dosya seç.`,
+        `Fotoğraf, sıkıştırma sonrasında bile ${formatMb(sizeLimit)} sınırını aşıyor (${formatMb(fileToUpload.size)}). Lütfen daha küçük bir dosya seç.`,
         'err'
       );
       return;
     }
+  } else {
+    // Video: artık tarayıcıda yeniden kodlama YAPMIYORUZ (önceki sürümde
+    // bazı videoların birkaç saniye sonra bozulmasına sebep oluyordu).
+    // Orijinal dosya olduğu gibi Cloudinary'e yüklenir; kırpma gerekiyorsa
+    // Cloudinary'nin kendi (güvenilir, sunucu taraflı) video işleme
+    // özelliğiyle yapılır.
+    if (!unlimited && selectedFile.size > ABSOLUTE_VIDEO_CEILING_BYTES) {
+      showStatus(
+        `Bu video çok büyük (${formatMb(selectedFile.size)}). Lütfen ${formatMb(ABSOLUTE_VIDEO_CEILING_BYTES)}'ı aşmayan bir video seç.`,
+        'err'
+      );
+      return;
+    }
+    if (!unlimited && !needsTrim && selectedFile.size > sizeLimit) {
+      showStatus(
+        `Video, ${formatMb(sizeLimit)} sınırını aşıyor (${formatMb(selectedFile.size)}). Lütfen daha küçük bir video seç ya da videoyu kısaltarak tekrar dene.`,
+        'err'
+      );
+      return;
+    }
+    submitBtn.disabled = true;
   }
 
   submitBtn.textContent = 'Yükleniyor…';
@@ -271,15 +281,28 @@ form.addEventListener('submit', async (e) => {
 
     submitBtn.textContent = 'Onaya gönderiliyor…';
 
+    let finalUrl = cloudResult.secure_url;
+    let durationSec = cloudResult.duration || null;
+    let trimmed = false;
+
+    if (isVideo && needsTrim) {
+      const start = Number(trimStartSlider.value);
+      const length = Number(trimLengthSlider.value);
+      finalUrl = buildTrimmedVideoUrl(cloudResult.secure_url, start, length);
+      durationSec = length;
+      trimmed = true;
+    }
+
     const res = await fetch('/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url: cloudResult.secure_url,
+        url: finalUrl,
         publicId: cloudResult.public_id,
         type: resourceType,
         bytes: cloudResult.bytes,
-        durationSec: cloudResult.duration || null,
+        durationSec,
+        trimmed,
         caption: captionValue,
       }),
     });

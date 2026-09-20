@@ -135,6 +135,47 @@
 
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
+        <h2 style="margin:0;">Son Silinenler</h2>
+        <div class="admin-stat"><%= deletedItems.length %> anı silinmiş — 24 saat içinde geri alabilirsin, sonra kalıcı olarak kaldırılır</div>
+      </div>
+    </div>
+
+    <div class="pending-list" id="deleted-list">
+      <% if (deletedItems.length === 0) { %>
+        <div class="empty-state">Silinmiş bir anı yok</div>
+      <% } %>
+      <% deletedItems.forEach(function(item) { %>
+        <% var msLeft = (item.deletedAt + deleteRetentionMs) - Date.now(); %>
+        <% var hoursLeft = Math.max(0, Math.ceil(msLeft / (60*60*1000))); %>
+        <div class="pending-item" data-id-row="<%= item.id %>" style="align-items:center;">
+          <div class="thumb"
+               data-url="<%= item.url %>"
+               data-type="<%= item.type %>"
+               data-name="<%= item.uploaderName %>"
+               data-caption="<%= item.caption %>">
+            <% if (item.type === 'video') { %>
+              <video src="<%= item.url %>" muted loop autoplay playsinline></video>
+            <% } else { %>
+              <img src="<%= item.url %>" alt="" />
+            <% } %>
+          </div>
+          <div class="info">
+            <div class="name"><%= item.uploaderName %> <span style="color:var(--text-dim); font-weight:400;">— <%= item.type === 'video' ? 'video' : 'fotoğraf' %></span></div>
+            <% if (item.caption) { %><div class="caption"><%= item.caption %></div><% } %>
+            <div class="date">
+              Silindi: <%= new Date(item.deletedAt).toLocaleString('tr-TR') %>
+              · <%= hoursLeft %> saat sonra kalıcı olarak silinecek
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn approve small" data-action="restore" data-id="<%= item.id %>">↩ Geri Al</button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
         <h2 style="margin:0;">Yasaklı IP'ler</h2>
         <div class="admin-stat"><%= bans.length %> IP adresi yasaklı — anı gönderemez (görüntüleme etkilenmez)</div>
       </div>

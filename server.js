@@ -37,6 +37,9 @@ const isProd = process.env.NODE_ENV === 'production';
 // kullanıcıya özel override'lar "app_users" tablosunda tutuluyor.
 // Supabase'e ulaşılamazsa (yapılandırılmamışsa) diye makul varsayılanlar:
 const FALLBACK_SETTINGS = settings.DEFAULTS;
+// Kırpılmış videolarda normal boyut sınırı yerine uygulanan, kötüye
+// kullanımı önleyen makul üst tavan (client tarafındakiyle aynı).
+const ABSOLUTE_VIDEO_CEILING_BYTES = 300 * 1024 * 1024;
 
 // Admin panelinden verilebilen sabit rozet seti. "founder" ve "croshy"
 // FULL_EXEMPT_BADGES ile eşleşir (bkz. effectiveLimitsFor) — sahibi tüm
@@ -277,6 +280,36 @@ function effectiveLimitsFor(user, globalSettings) {
   };
 }
 
+// ---------- Yumuşak silinen öğelerin kalıcı temizliği ----------
+// Bir öğe silindiğinde hemen kalıcı olarak yok edilmez; 24 saat boyunca
+// "Son Silinenler" altında geri alınabilir durumda kalır. Bu süre dolan
+// öğeleri periyodik olarak (ve sunucu her açıldığında bir kere) tarayıp
+// hem Cloudinary'den hem Supabase'den kalıcı olarak temizliyoruz.
+const DELETE_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+async function purgeExpiredDeletions() {
+  try {
+    const expired = await db.getExpiredDeletedItems(Date.now() - DELETE_RETENTION_MS);
+    for (const item of expired) {
+      try {
+        await cloudinary.uploader.destroy(item.publicId, {
+          resource_type: item.type === 'video' ? 'video' : 'image',
+        });
+      } catch (e) {
+        console.error('Cloudinary silme hatası (süresi dolan):', e.message);
+      }
+      await db.hardDeleteItem(item.id);
+      await likes.removeAllForItem(item.id);
+      await viewsStore.removeAllForItem(item.id);
+    }
+    if (expired.length > 0) {
+      console.log(`🗑️  ${expired.length} süresi dolmuş silinen anı kalıcı olarak temizlendi.`);
+    }
+  } catch (e) {
+    console.error('Süresi dolan silinenler temizlenemedi:', e.message);
+  }
+}
+
 // ---------- Yardımcı middleware'ler ----------
 
 function requireAdminPage(req, res, next) {
@@ -442,7 +475,7 @@ app.post(
       });
     }
 
-    const { url, publicId, type, caption, bytes, durationSec } = req.body;
+    const { url, publicId, type, caption, bytes, durationSec, trimmed } = req.body;
     const cleanCaption = (caption || '').toString().trim();
 
     if (!url || !publicId || !type) {
@@ -465,13 +498,33 @@ app.post(
       return res.status(400).json({ error: 'Açıklama yazman zorunlu.' });
     }
 
+    // Videolar artık tarayıcıda yeniden kodlanmıyor — kırpma Cloudinary'nin
+    // kendi (so_/du_) URL dönüşümüyle sunucu tarafında yapılıyor. Bu yüzden
+    // "trimmed" true ise "bytes" ORİJİNAL (henüz kırpılmamış) dosyanın
+    // boyutudur ve gerçekte servis edilecek klip çok daha küçük olacaktır —
+    // bu durumda normal boyut sınırı yerine, kötüye kullanımı önlemek için
+    // sadece makul bir üst tavan (ABSOLUTE_VIDEO_CEILING_BYTES) uygulanır.
+    if (!limits.unlimited && type === 'video' && trimmed && typeof bytes === 'number' && bytes > ABSOLUTE_VIDEO_CEILING_BYTES) {
+      try {
+        await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+      } catch (e) {
+        console.error('Cloudinary silme hatası (üst tavan aşımı):', e.message);
+      }
+      return res.status(413).json({
+        error: `Video çok büyük (${(bytes / (1024 * 1024)).toFixed(1)}MB). Lütfen daha küçük bir video seç.`,
+      });
+    }
+
     // Dosya boyutu sınırı — kullanıcıya özel bir değer varsa o, yoksa genel
     // ayar geçerlidir. "bytes" Cloudinary'nin yükleme sonrası döndürdüğü
-    // gerçek dosya boyutudur; client tarafındaki sıkıştırma/kontroller
-    // atlatılsa bile burada yakalanır.
+    // gerçek dosya boyutudur; client tarafındaki kontroller atlatılsa bile
+    // burada yakalanır. Kırpılmış videolarda bu kontrol atlanır (yukarıdaki
+    // üst tavan zaten geçerli) çünkü fiilen servis edilecek klip çok daha
+    // küçüktür.
     const sizeLimit = type === 'video' ? limits.videoBytes : limits.imageBytes;
+    const skipByteCheck = type === 'video' && !!trimmed;
 
-    if (typeof bytes === 'number' && bytes > sizeLimit) {
+    if (!skipByteCheck && typeof bytes === 'number' && bytes > sizeLimit) {
       try {
         await cloudinary.uploader.destroy(publicId, { resource_type: type });
       } catch (e) {
@@ -484,8 +537,9 @@ app.post(
     }
 
     // Video süresi sınırı — kullanıcıya özel bir değer varsa o, yoksa genel
-    // ayar geçerlidir. Client tarafında kırpma denenir, ama Cloudinary'nin
-    // döndürdüğü gerçek süre burada son kez doğrulanır.
+    // ayar geçerlidir. Kırpma seçildiyse "durationSec" fiilen servis
+    // edilecek klip uzunluğudur (client tarafında kaydırıcıyla sınıra göre
+    // zaten sınırlandırılmıştır); burada son kez doğrulanır.
     if (type === 'video' && typeof durationSec === 'number' && durationSec > limits.videoDurationSec + 2) {
       try {
         await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
@@ -737,20 +791,32 @@ app.get(
     const isSuperAdmin = req.session.adminRole === 'superadmin';
 
     // Moderatör hesabı için IP listesi/genel ayarlar/kullanıcı limitleri/
-    // rozetler/onaylı anılar hiç çekilmiyor bile — hem gereksiz Supabase
-    // isteği yapılmasın hem de bu veriler yanlışlıkla template'e sızmasın diye.
-    const [pending, approvedCount, banList, customLimitUsers, globalSettings, badgeUsers, weeklyLeaderboard, approvedRaw, likeCounts] =
-      await Promise.all([
-        db.getPendingItems(),
-        db.getApprovedCount(),
-        isSuperAdmin ? bans.listBans() : Promise.resolve([]),
-        isSuperAdmin ? users.listUsersWithCustomLimits() : Promise.resolve([]),
-        isSuperAdmin ? getSettingsSafe() : Promise.resolve(FALLBACK_SETTINGS),
-        isSuperAdmin ? users.listUsersWithBadges() : Promise.resolve([]),
-        isSuperAdmin ? users.getWeeklyLeaderboard() : Promise.resolve({ topSubmitters: [], topLiked: [] }),
-        isSuperAdmin ? db.getApprovedItems() : Promise.resolve([]),
-        isSuperAdmin ? likes.getAllCounts() : Promise.resolve({}),
-      ]);
+    // rozetler/onaylı anılar/silinenler hiç çekilmiyor bile — hem gereksiz
+    // Supabase isteği yapılmasın hem de bu veriler yanlışlıkla template'e
+    // sızmasın diye.
+    const [
+      pending,
+      approvedCount,
+      banList,
+      customLimitUsers,
+      globalSettings,
+      badgeUsers,
+      weeklyLeaderboard,
+      approvedRaw,
+      likeCounts,
+      deletedItems,
+    ] = await Promise.all([
+      db.getPendingItems(),
+      db.getApprovedCount(),
+      isSuperAdmin ? bans.listBans() : Promise.resolve([]),
+      isSuperAdmin ? users.listUsersWithCustomLimits() : Promise.resolve([]),
+      isSuperAdmin ? getSettingsSafe() : Promise.resolve(FALLBACK_SETTINGS),
+      isSuperAdmin ? users.listUsersWithBadges() : Promise.resolve([]),
+      isSuperAdmin ? users.getWeeklyLeaderboard() : Promise.resolve({ topSubmitters: [], topLiked: [] }),
+      isSuperAdmin ? db.getApprovedItems() : Promise.resolve([]),
+      isSuperAdmin ? likes.getAllCounts() : Promise.resolve({}),
+      isSuperAdmin ? db.getDeletedItems() : Promise.resolve([]),
+    ]);
 
     const approvedItems = approvedRaw
       .map((i) => ({ ...i, likes: likeCounts[i.id] || 0 }))
@@ -760,6 +826,8 @@ app.get(
       pending,
       approvedCount,
       approvedItems,
+      deletedItems,
+      deleteRetentionMs: DELETE_RETENTION_MS,
       username: req.session.username || 'admin',
       adminRole: req.session.adminRole || 'superadmin',
       bans: banList,
@@ -907,23 +975,16 @@ app.post(
     const item = await db.getItemById(req.params.id);
     if (!item) return res.status(404).json({ error: 'Bulunamadı.' });
 
-    try {
-      await cloudinary.uploader.destroy(item.publicId, {
-        resource_type: item.type === 'video' ? 'video' : 'image',
-      });
-    } catch (e) {
-      console.error('Cloudinary silme hatası:', e.message);
-    }
-
-    await db.deleteItem(item.id);
-    await likes.removeAllForItem(item.id);
-    await viewsStore.removeAllForItem(item.id);
+    // Yumuşak silme: Cloudinary'den hemen silinmez, 24 saat "Son Silinenler"
+    // altında geri alınabilir durumda bekler (bkz. purgeExpiredDeletions).
+    await db.softDeleteItem(item.id);
     res.json({ ok: true });
   })
 );
 
-// Daha önce onaylanmış (zaten yayında olan) bir anıyı tamamen kaldırır.
-// Sadece tam yetkili admin kullanabilir.
+// Daha önce onaylanmış (zaten yayında olan) bir anıyı kaldırır.
+// Sadece tam yetkili admin kullanabilir. Yumuşak silinir — 24 saat içinde
+// "Son Silinenler" bölümünden geri alınabilir.
 app.post(
   '/api/admin/delete-approved/:id',
   requireSuperAdminApi,
@@ -931,25 +992,29 @@ app.post(
     const item = await db.getItemById(req.params.id);
     if (!item || item.status !== 'approved') return res.status(404).json({ error: 'Bulunamadı.' });
 
-    try {
-      await cloudinary.uploader.destroy(item.publicId, {
-        resource_type: item.type === 'video' ? 'video' : 'image',
-      });
-    } catch (e) {
-      console.error('Cloudinary silme hatası:', e.message);
-    }
+    await db.softDeleteItem(item.id);
+    res.json({ ok: true });
+  })
+);
 
-    await db.deleteItem(item.id);
-    await likes.removeAllForItem(item.id);
-    await viewsStore.removeAllForItem(item.id);
+// Yumuşak silinmiş bir anıyı (24 saatlik süre dolmadan önce) geri getirir.
+// Sadece tam yetkili admin kullanabilir.
+app.post(
+  '/api/admin/restore/:id',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    const item = await db.getAnyItemById(req.params.id);
+    if (!item || !item.deletedAt) return res.status(404).json({ error: 'Bulunamadı ya da zaten silinmemiş.' });
+
+    await db.restoreItem(item.id);
     res.json({ ok: true });
   })
 );
 
 // Bir öğeyi reddedip gönderen IP'yi yasaklar; aynı IP'den bekleyen diğer
-// tüm gönderiler de temizlenir. Moderatör bu işlemi yapabilir AMA gerçek
-// IP adresini asla response'da görmez — sadece işlem sonucu (ok/removedCount)
-// döner, ip alanı bilerek dahil edilmez.
+// tüm gönderiler de temizlenir (yumuşak silme). Moderatör bu işlemi
+// yapabilir AMA gerçek IP adresini asla response'da görmez — sadece işlem
+// sonucu (ok/removedCount) döner, ip alanı bilerek dahil edilmez.
 app.post(
   '/api/admin/ban/:id',
   requireAdminApi,
@@ -964,14 +1029,7 @@ app.post(
 
     const toRemove = await db.getPendingItemsByIp(ip);
     for (const item of toRemove) {
-      try {
-        await cloudinary.uploader.destroy(item.publicId, {
-          resource_type: item.type === 'video' ? 'video' : 'image',
-        });
-      } catch (e) {
-        console.error('Cloudinary silme hatası:', e.message);
-      }
-      await db.deleteItem(item.id);
+      await db.softDeleteItem(item.id);
     }
 
     res.json({ ok: true, removedCount: toRemove.length });
@@ -1084,23 +1142,15 @@ app.post(
   })
 );
 
-// Kendi gönderdiğin bir anıyı (bekleyen ya da onaylı) tamamen sil.
+// Kendi gönderdiğin bir anıyı (bekleyen ya da onaylı) sil (24 saat içinde
+// admin tarafından geri alınabilir durumda kalır).
 app.post(
   '/profile/delete/:id',
   requireUserPage,
   asyncRoute(async (req, res) => {
     const item = await db.getItemById(req.params.id);
     if (item && item.userId === req.session.userId) {
-      try {
-        await cloudinary.uploader.destroy(item.publicId, {
-          resource_type: item.type === 'video' ? 'video' : 'image',
-        });
-      } catch (e) {
-        console.error('Cloudinary silme hatası (profil):', e.message);
-      }
-      await db.deleteItem(item.id);
-      await likes.removeAllForItem(item.id);
-      await viewsStore.removeAllForItem(item.id);
+      await db.softDeleteItem(item.id);
     }
     // item bulunamadıysa ya da başkasına aitse sessizce yok say — kendi
     // anılarının kimliğini/id'sini bilmeyen biri başkasının anısını silemez.
@@ -1147,4 +1197,6 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✨ CroShy Anı http://localhost:${PORT} adresinde çalışıyor`);
+  purgeExpiredDeletions();
+  setInterval(purgeExpiredDeletions, 30 * 60 * 1000).unref();
 });

@@ -30,7 +30,8 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
   "hakkımda" metni, paylaştığı anıların galerisi, istatistikleri
 - Diğer kullanıcıların herkese açık profillerini görüntüleyebilir, o kişinin
   paylaştığı anıları ve topladığı beğenileri görebilirsin
-- Rozet sistemi — bazı özel rozetler sahibine ekstra ayrıcalıklar tanır
+- Rozet sistemi — kayıt olan herkes bir rozet kazanır, bazı özel rozetler sahibine ekstra ayrıcalıklar tanır
+- Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**
 - Modern, koyu temalı; Space Grotesk ve Inter fontları

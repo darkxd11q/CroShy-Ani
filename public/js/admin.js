@@ -166,7 +166,7 @@ document.querySelectorAll('#badges-list [data-action="revoke-badge"]').forEach((
 // Onaylı bir anıyı kaldırma butonları
 document.querySelectorAll('#approved-list [data-action="delete-approved"]').forEach((btn) => {
   btn.addEventListener('click', async () => {
-    if (!confirm('Bu anı yayından tamamen kaldırılsın mı? Bu işlem geri alınamaz.')) return;
+    if (!confirm('Bu anı yayından kaldırılsın mı? (24 saat içinde "Son Silinenler"den geri alabilirsin)')) return;
     btn.disabled = true;
     const card = btn.closest('[data-id-row]');
     try {
@@ -180,6 +180,32 @@ document.querySelectorAll('#approved-list [data-action="delete-approved"]').forE
           const list = document.getElementById('approved-list');
           if (list && !list.querySelector('[data-id-row]')) {
             list.innerHTML = '<div class="empty-state">Henüz onaylı bir anı yok</div>';
+          }
+        }, 300);
+      }
+    } catch (err) {
+      alert('Hata: ' + err.message);
+      btn.disabled = false;
+    }
+  });
+});
+
+// Silinmiş bir anıyı geri alma butonları
+document.querySelectorAll('#deleted-list [data-action="restore"]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const row = btn.closest('[data-id-row]');
+    try {
+      await adminFetch(`/api/admin/restore/${btn.dataset.id}`, { method: 'POST' });
+      if (row) {
+        row.style.transition = 'opacity 0.3s, transform 0.3s';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(20px)';
+        setTimeout(() => {
+          row.remove();
+          const list = document.getElementById('deleted-list');
+          if (list && !list.querySelector('[data-id-row]')) {
+            list.innerHTML = '<div class="empty-state">Silinmiş bir anı yok</div>';
           }
         }, 300);
       }

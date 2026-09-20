@@ -40,6 +40,8 @@ async function createUser({ id, username, passwordHash, createdAt }) {
     username_lower: username.trim().toLowerCase(),
     password_hash: passwordHash,
     created_at: createdAt,
+    // Siteye kayıt olan herkese otomatik olarak "Üye" rozeti verilir.
+    badges: ['member'],
   });
   if (error) {
     // 23505 = Postgres "unique_violation" -> aynı anda iki kayıt yarışırsa
