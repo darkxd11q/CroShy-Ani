@@ -6,6 +6,7 @@
 <title>Admin Panel — CroShy Anı</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/img/logo-64.png" />
 <link rel="apple-touch-icon" href="/img/logo-192.png" />
+<script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
 <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
@@ -286,6 +287,49 @@
           </div>
           <div class="actions">
             <button class="btn danger small" data-action="reset-limits" data-username="<%= u.username %>">Sıfırla</button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
+        <h2 style="margin:0;">Rozet Kodları</h2>
+        <div class="admin-stat">Tek kullanımlık, 1 gün geçerli kodlarla 💜 ÖZEL ya da 💠 Plus rolü ver</div>
+      </div>
+    </div>
+
+    <div class="codegen-card glow-special" id="codegenCard">
+      <div class="codegen-roles">
+        <button type="button" class="role-chip role-special active" data-badge="special">💜 ÖZEL</button>
+        <button type="button" class="role-chip role-plus" data-badge="plus">💠 Plus</button>
+      </div>
+      <div class="code-display" id="codeDisplay"><span class="code-placeholder">DARK-1907-••••••••</span></div>
+      <div class="code-meta" id="codeMeta">Bir rol seç ve kod oluştur</div>
+      <div class="codegen-actions">
+        <button type="button" class="btn primary" id="generateCodeBtn">✨ Kod Oluştur</button>
+        <button type="button" class="btn" id="copyCodeBtn" style="display:none;">📋 Kopyala</button>
+      </div>
+    </div>
+
+    <div class="pending-list" id="codes-list">
+      <% if (redeemCodeList.length === 0) { %>
+        <div class="empty-state">Henüz kod oluşturulmadı</div>
+      <% } %>
+      <% redeemCodeList.forEach(function(c) {
+           var state = c.redeemedBy ? 'used' : (c.expiresAt < Date.now() ? 'expired' : 'active');
+           var info = BADGE_INFO[c.badge] || { label: c.badge, icon: '', className: '' }; %>
+        <div class="pending-item" style="align-items:center;">
+          <div class="info">
+            <div class="name badge-holder-row">
+              <span class="code-mono"><%= c.code %></span>
+              <span class="badge-pill <%= info.className %>"><%= info.icon %> <%= info.label %></span>
+              <span class="code-status <%= state %>"><%= state === 'used' ? 'Kullanıldı' : (state === 'expired' ? 'Süresi doldu' : 'Aktif') %></span>
+            </div>
+            <div class="date">
+              Oluşturuldu: <%= new Date(c.createdAt).toLocaleString('tr-TR') %>
+              <% if (state === 'used') { %> · <%= c.redeemedBy %> kullandı<% } else if (state === 'active') { %> · <%= Math.max(0, Math.ceil((c.expiresAt - Date.now()) / 3600000)) %> saat geçerli<% } %>
+            </div>
           </div>
         </div>
       <% }) %>

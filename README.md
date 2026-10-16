@@ -31,6 +31,7 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
 - Diğer kullanıcıların herkese açık profillerini görüntüleyebilir, o kişinin
   paylaştığı anıları ve topladığı beğenileri görebilirsin
 - Rozet sistemi — kayıt olan herkes bir rozet kazanır, bazı özel rozetler sahibine ekstra ayrıcalıklar tanır
+- **ÖZEL** ve **Plus** üyelik — özel kodlarla açılan premium roller: daha yüksek yükleme sınırları, günlük daha fazla paylaşım, ekstra renk temaları ve kişiye özel bir karşılama deneyimi
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**

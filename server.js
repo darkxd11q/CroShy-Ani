@@ -14,6 +14,7 @@ const logs = require('./logs');
 const likes = require('./likes');
 const viewsStore = require('./views_store');
 const rememberTokens = require('./rememberTokens');
+const redeemCodes = require('./redeemCodes');
 const settings = require('./settings');
 const {
   safeStringEqual,
@@ -47,11 +48,27 @@ const ABSOLUTE_VIDEO_CEILING_BYTES = 300 * 1024 * 1024;
 const BADGE_INFO = {
   founder: { label: 'Site Kurucusu', icon: '🏆', className: 'badge-founder' },
   croshy: { label: 'CroShy', icon: '❤️', className: 'badge-croshy' },
+  special: { label: 'ÖZEL', icon: '💜', className: 'badge-special' },
+  plus: { label: 'Plus', icon: '💠', className: 'badge-plus' },
   weekly_active: { label: 'Haftanın Aktifi', icon: '🔥', className: 'badge-weekly-active' },
   weekly_liked: { label: 'Haftanın Beğenileni', icon: '⭐', className: 'badge-weekly-liked' },
   member: { label: 'Üye', icon: '👤', className: 'badge-member' },
 };
-const BADGE_ORDER = ['founder', 'croshy', 'weekly_active', 'weekly_liked', 'member'];
+const BADGE_ORDER = ['founder', 'croshy', 'special', 'plus', 'weekly_active', 'weekly_liked', 'member'];
+
+// Kod ile edinilebilen premium roller (bkz. redeem_codes tablosu).
+const REDEEMABLE_BADGES = ['special', 'plus'];
+
+// ÖZEL/Plus ayrıcalıkları: biraz daha yüksek sınırlar + günlük en az 3
+// gönderim + 3 ekstra tema seçme hakkı.
+const PREMIUM_BADGES = ['special', 'plus'];
+const PREMIUM_LIMIT_MULTIPLIER = 1.5;
+const PREMIUM_DAILY_LIMIT = 3;
+const PREMIUM_THEMES = ['ocean', 'sunset', 'emerald'];
+
+function hasPremium(user) {
+  return !!(user && Array.isArray(user.badges) && user.badges.some((b) => PREMIUM_BADGES.includes(b)));
+}
 
 // "trust proxy" SADECE üretimde (Render'ın tek katmanlı ters proxy'si arkasında)
 // açık olmalı. Yerelde (npm start ile doğrudan çalıştırırken) bunu açık
@@ -95,6 +112,35 @@ const REMEMBER_MS = 90 * 24 * 60 * 60 * 1000; // 90 gün
 
 function sha256(str) {
   return crypto.createHash('sha256').update(String(str)).digest('hex');
+}
+
+// Rozet kodu: "DARK-1907-" + 8 rastgele büyük/küçük harf (örn. DARK-1907-MjFoBdgQ).
+// Büyük/küçük harf ayrımı önemlidir. crypto.randomInt kriptografik olarak
+// güvenli rastgelelik sağlar (Math.random tahmin edilebilir olurdu).
+const CODE_PREFIX = 'DARK-1907-';
+const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const CODE_VALID_MS = 24 * 60 * 60 * 1000; // 1 gün
+
+function generateRedeemCode() {
+  let suffix = '';
+  for (let i = 0; i < 8; i++) suffix += CODE_CHARS[crypto.randomInt(CODE_CHARS.length)];
+  return CODE_PREFIX + suffix;
+}
+
+// Premium kullanıcının seçtiği temayı (varsa) tarayıcıya çerez olarak yazar;
+// her sayfanın <head>'indeki küçük script bunu okuyup temayı anında uygular.
+function syncThemeCookie(res, user) {
+  if (hasPremium(user) && user.theme && PREMIUM_THEMES.includes(user.theme)) {
+    res.cookie('croshy_theme', user.theme, {
+      httpOnly: false,
+      sameSite: 'lax',
+      secure: isProd,
+      maxAge: 365 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+  } else {
+    res.clearCookie('croshy_theme', { path: '/' });
+  }
 }
 
 function formatDuration(totalSec) {
@@ -211,6 +257,7 @@ app.use(async (req, res, next) => {
 // Her giriş/kayıt formu kendi bağımsız brute-force sayaçlarını kullanır
 const adminGuard = createLoginGuard();
 const userGuard = createLoginGuard();
+const redeemGuard = createLoginGuard({ maxAttempts: 6 });
 
 const adminLoginLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
@@ -269,15 +316,36 @@ function hasFullExemption(user) {
 // sınırlar kaldırılır.
 function effectiveLimitsFor(user, globalSettings) {
   if (hasFullExemption(user)) {
-    return { imageBytes: NO_LIMIT, videoBytes: NO_LIMIT, videoDurationSec: NO_LIMIT, dailyLimit: NO_LIMIT, unlimited: true };
+    return {
+      imageBytes: NO_LIMIT,
+      videoBytes: NO_LIMIT,
+      videoDurationSec: NO_LIMIT,
+      dailyLimit: NO_LIMIT,
+      unlimited: true,
+      premium: false,
+    };
   }
-  return {
+
+  const base = {
     imageBytes: (user && user.customImageBytes) || globalSettings.maxImageBytes,
     videoBytes: (user && user.customVideoBytes) || globalSettings.maxVideoBytes,
     videoDurationSec: (user && user.customVideoDurationSec) || globalSettings.maxVideoDurationSec,
     dailyLimit: globalSettings.dailySubmitLimit,
-    unlimited: false,
   };
+
+  // ÖZEL/Plus: tüm sınırlar biraz daha yüksek, günlük gönderim en az 3.
+  if (hasPremium(user)) {
+    return {
+      imageBytes: Math.round(base.imageBytes * PREMIUM_LIMIT_MULTIPLIER),
+      videoBytes: Math.round(base.videoBytes * PREMIUM_LIMIT_MULTIPLIER),
+      videoDurationSec: Math.round(base.videoDurationSec * PREMIUM_LIMIT_MULTIPLIER),
+      dailyLimit: Math.max(PREMIUM_DAILY_LIMIT, base.dailyLimit),
+      unlimited: false,
+      premium: true,
+    };
+  }
+
+  return { ...base, unlimited: false, premium: false };
 }
 
 // ---------- Yumuşak silinen öğelerin kalıcı temizliği ----------
@@ -434,6 +502,9 @@ app.get(
     ]);
     const limits = effectiveLimitsFor(user, globalSettings);
     res.json({
+      unlimited: limits.unlimited,
+      premium: limits.premium,
+      premiumRole: user && user.badges.includes('special') ? 'special' : user && user.badges.includes('plus') ? 'plus' : null,
       username: req.session.username,
       dailyLimit: limits.dailyLimit,
       usedToday: used,
@@ -615,6 +686,7 @@ app.post(
         req.session.userId = user.id;
         req.session.username = user.username;
         issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+        syncThemeCookie(res, user);
         res.redirect('/upload');
       } catch (e) {
         console.error('Giriş sonrası hata:', e.message);
@@ -674,6 +746,7 @@ app.post(
         req.session.userId = user.id;
         req.session.username = user.username;
         issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+        syncThemeCookie(res, user);
         res.redirect('/upload');
       } catch (e) {
         console.error('Kayıt sonrası hata:', e.message);
@@ -689,6 +762,7 @@ app.post(
     await clearRememberCookie(req, res);
     req.session.destroy(() => {
       res.clearCookie('croshy.sid');
+      res.clearCookie('croshy_theme', { path: '/' });
       res.redirect('/login');
     });
   })
@@ -805,6 +879,7 @@ app.get(
       approvedRaw,
       likeCounts,
       deletedItems,
+      redeemCodeList,
     ] = await Promise.all([
       db.getPendingItems(),
       db.getApprovedCount(),
@@ -816,6 +891,7 @@ app.get(
       isSuperAdmin ? db.getApprovedItems() : Promise.resolve([]),
       isSuperAdmin ? likes.getAllCounts() : Promise.resolve({}),
       isSuperAdmin ? db.getDeletedItems() : Promise.resolve([]),
+      isSuperAdmin ? redeemCodes.listRecent(25) : Promise.resolve([]),
     ]);
 
     const approvedItems = approvedRaw
@@ -827,6 +903,7 @@ app.get(
       approvedCount,
       approvedItems,
       deletedItems,
+      redeemCodeList,
       deleteRetentionMs: DELETE_RETENTION_MS,
       username: req.session.username || 'admin',
       adminRole: req.session.adminRole || 'superadmin',
@@ -922,6 +999,23 @@ app.post(
     const user = await users.clearCustomLimits(username.trim());
     if (!user) return res.status(404).json({ error: 'Bu kullanıcı adında bir hesap bulunamadı.' });
     res.json({ ok: true, username: user.username });
+  })
+);
+
+// Tek kullanımlık, 1 gün geçerli rozet kodu oluştur — sadece tam yetkili admin.
+app.post(
+  '/api/admin/redeem-codes/create',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    const { badge } = req.body;
+    if (!REDEEMABLE_BADGES.includes(badge)) return res.status(400).json({ error: 'Geçersiz rol.' });
+
+    const code = generateRedeemCode();
+    const now = Date.now();
+    const expiresAt = now + CODE_VALID_MS;
+    await redeemCodes.create({ code, badge, createdAt: now, expiresAt });
+
+    res.json({ ok: true, code, badge, label: BADGE_INFO[badge].label, icon: BADGE_INFO[badge].icon, expiresAt });
   })
 );
 
@@ -1090,6 +1184,8 @@ async function buildOwnProfileData(userId, username) {
     totalLikes,
     items,
     limits,
+    premium: !!limits.premium,
+    theme: user ? user.theme : null,
     hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
     error: null,
     success: null,
@@ -1186,6 +1282,91 @@ app.get(
       items: approvedItems,
       isOwnProfile: req.session && req.session.username === user.username,
     });
+  })
+);
+
+// ---------- Kod kullanma (/redeem) ----------
+
+app.get('/redeem', requireUserPage, (req, res) => {
+  res.render('redeem', { error: null, success: null });
+});
+
+app.post(
+  '/redeem',
+  requireUserPage,
+  asyncRoute(async (req, res) => {
+    const ip = req.ip;
+    const { locked, remainingMs } = redeemGuard.getLoginStatus(ip);
+    if (locked) {
+      const minutes = Math.ceil(remainingMs / 60000);
+      return res.status(429).render('redeem', {
+        error: `Çok fazla hatalı deneme yapıldı. Lütfen ${minutes} dakika sonra tekrar dene.`,
+        success: null,
+      });
+    }
+
+    const raw = (req.body.code || '').toString().trim();
+    const fail = (msg) => {
+      redeemGuard.registerFailedAttempt(ip);
+      return res.render('redeem', { error: msg, success: null });
+    };
+
+    // Büyük/küçük harf ayrımı önemli: DARK-1907- + tam 8 harf.
+    if (!/^DARK-1907-[A-Za-z]{8}$/.test(raw)) return fail('Bu kod geçerli bir formatta değil.');
+
+    const record = await redeemCodes.findByCode(raw);
+    if (!record) return fail('Böyle bir kod bulunamadı.');
+    if (record.redeemedBy) return fail('Bu kod daha önce kullanılmış.');
+    if (record.expiresAt < Date.now()) return fail('Bu kodun süresi dolmuş.');
+
+    // Atomik "sahiplen": aynı anda iki kişi denerse sadece biri başarılı olur.
+    const claimed = await redeemCodes.markRedeemed(record.code, req.session.username);
+    if (!claimed) return fail('Bu kod daha önce kullanılmış.');
+
+    await users.grantBadge(req.session.username, record.badge);
+    redeemGuard.resetAttempts(ip);
+
+    res.render('redeem', {
+      error: null,
+      success: {
+        badge: record.badge,
+        label: BADGE_INFO[record.badge].label,
+        icon: BADGE_INFO[record.badge].icon,
+        username: req.session.username,
+      },
+    });
+  })
+);
+
+// ---------- Tema seçimi (sadece ÖZEL / Plus) ----------
+
+app.post(
+  '/profile/update-theme',
+  requireUserPage,
+  asyncRoute(async (req, res) => {
+    const user = await users.findUserById(req.session.userId);
+    const theme = (req.body.theme || '').toString().trim();
+    const renderWith = async (extra) => {
+      const data = await buildOwnProfileData(req.session.userId, req.session.username);
+      return res.render('profile', { ...data, ...extra });
+    };
+
+    if (!hasPremium(user)) return renderWith({ error: 'Tema seçimi sadece ÖZEL ve Plus üyelere açık.' });
+    if (theme && !PREMIUM_THEMES.includes(theme)) return renderWith({ error: 'Geçersiz tema.' });
+
+    await users.updateTheme(user.id, theme || null);
+    if (theme) {
+      res.cookie('croshy_theme', theme, {
+        httpOnly: false,
+        sameSite: 'lax',
+        secure: isProd,
+        maxAge: 365 * 24 * 60 * 60 * 1000,
+        path: '/',
+      });
+    } else {
+      res.clearCookie('croshy_theme', { path: '/' });
+    }
+    return renderWith({ success: theme ? 'Tema uygulandı.' : 'Varsayılan temaya dönüldü.' });
   })
 );
 

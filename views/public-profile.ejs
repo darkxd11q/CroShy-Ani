@@ -6,6 +6,7 @@
 <title><%= profileUsername %> — CroShy Anı</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/img/logo-64.png" />
 <link rel="apple-touch-icon" href="/img/logo-192.png" />
+<script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
 <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
@@ -63,7 +64,7 @@
   <div class="upload-wrap" style="max-width: 780px;">
     <div class="upload-card" style="margin-bottom: 22px;">
       <div class="profile-hero" style="margin-bottom: 0;">
-        <div class="profile-avatar" style="width:76px; height:76px; min-width:76px; font-size:2rem;"><%= profileUsername.charAt(0).toUpperCase() %></div>
+        <div class="profile-avatar <%= badges.includes('special') ? 'avatar-special' : (badges.includes('plus') ? 'avatar-plus' : '') %>" style="width:76px; height:76px; min-width:76px; font-size:2rem;"><%= profileUsername.charAt(0).toUpperCase() %></div>
         <div class="profile-identity">
           <div class="profile-name-row">
             <span class="profile-name" style="font-size:1.7rem;"><%= profileUsername %></span>

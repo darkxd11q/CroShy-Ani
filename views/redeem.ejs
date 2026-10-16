@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kod Kullan — CroShy Anı</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/img/logo-64.png" />
+<link rel="apple-touch-icon" href="/img/logo-192.png" />
+<script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <div class="bg-blobs">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+  </div>
+
+  <header class="site">
+    <a href="/" class="brand"><span class="brand-mark-wrap"><img src="/img/logo-192.png" alt="CroShy Anı logosu" /></span><span class="brand-text">CroShy Anı</span></a>
+    <nav class="site-nav">
+      <div class="social-dropdown" id="socialDropdown">
+        <button type="button" class="yt-link social-trigger" aria-label="Bağlantılar" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9.5 14.5 14.5 9.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M11 6.5 12.7 4.8a3.2 3.2 0 0 1 4.5 4.5L15.5 11" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13 17.5 11.3 19.2a3.2 3.2 0 0 1-4.5-4.5L8.5 13" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="social-menu">
+          <a href="https://youtube.com/CroShy" target="_blank" rel="noopener" class="social-menu-item">
+            <svg class="social-icon" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+              <rect width="28" height="28" rx="7" fill="#FF0000"/>
+              <path d="M11.5 9.4L19.6 14L11.5 18.6V9.4Z" fill="white"/>
+            </svg>
+            YouTube
+          </a>
+          <a href="https://discord.gg/Vp8JcCynZF" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-discord.png" alt="" />
+            Discord
+          </a>
+          <a href="https://kick.com/croshy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-kick.png" alt="" />
+            Kick
+          </a>
+          <a href="https://twitch.tv/croshyy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-twitch.png" alt="" />
+            Twitch
+          </a>
+          <a href="https://bynogame.com/destekle/croshy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon wordmark" src="/img/social-bynogame.png" alt="" />
+            Bağış Yap
+          </a>
+        </div>
+      </div>
+      <a href="/upload" class="btn small">Anı Ekle</a>
+      <form method="POST" action="/logout" style="margin:0;">
+        <button type="submit" class="btn small">Çıkış Yap</button>
+      </form>
+      <a href="/" class="btn ghost">← Ana Sayfa</a>
+    </nav>
+  </header>
+
+  <div class="upload-wrap" style="max-width: 560px;">
+    <span class="eyebrow">Özel Kod</span>
+
+    <div class="redeem-card">
+      <div class="redeem-glow"></div>
+      <div class="redeem-icon">🎟️</div>
+      <h1 class="redeem-title">Kodunu Kullan</h1>
+      <p class="redeem-sub">Sana verilen özel kodu gir ve <span class="gradient-text">ÖZEL</span> ya da <span class="gradient-text">Plus</span> ayrıcalıklarının kilidini aç.</p>
+
+      <% if (error) { %>
+        <div class="login-error" style="position:relative; margin-bottom: 14px;"><%= error %></div>
+      <% } %>
+
+      <form method="POST" action="/redeem" autocomplete="off">
+        <input class="redeem-input" type="text" name="code" id="codeInput" placeholder="DARK-1907-XXXXXXXX"
+               maxlength="18" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" required />
+        <button class="btn primary redeem-btn" type="submit">✨ Kodu Kullan</button>
+      </form>
+
+      <div class="redeem-perks">
+        <span class="redeem-perk">📈 Daha yüksek sınırlar</span>
+        <span class="redeem-perk">📅 Günde en az 3 anı</span>
+        <span class="redeem-perk">🎨 3 ekstra tema</span>
+        <span class="redeem-perk">✨ Kişiye özel deneyim</span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site">CroShy Anı · Kodlar tek kullanımlıktır ve 1 gün geçerlidir</footer>
+
+  <% if (success) { %>
+    <div class="reveal-overlay reveal-<%= success.badge %>" id="revealOverlay">
+      <div class="confetti" id="confetti"></div>
+      <div class="reveal-card">
+        <div class="reveal-rings"><span></span><span></span><span></span></div>
+        <div class="reveal-icon"><%= success.icon %></div>
+        <div class="reveal-kicker">Tebrikler, <%= success.username %>!</div>
+        <h2 class="reveal-title"><span class="reveal-shimmer"><%= success.label %></span> artık senin!</h2>
+        <ul class="reveal-perks">
+          <li>📈 Tüm yükleme sınırların %50 daha yüksek</li>
+          <li>📅 Günde en az 3 anı paylaşabilirsin</li>
+          <li>🎨 3 ekstra temadan birini seçebilirsin</li>
+          <li>✨ Kişiye özel karşılama ve rozet</li>
+        </ul>
+        <div class="reveal-actions">
+          <a class="btn primary" href="/profile">🎨 Profilime Git</a>
+          <a class="btn" href="/upload">Anı Paylaş</a>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var c = document.getElementById('confetti');
+        if (!c) return;
+        var colors = <%- success.badge === 'special' ? "['#a855f7','#f5f3ff','#c084fc','#e9d5ff','#ec4899']" : "['#3b82f6','#eff6ff','#60a5fa','#bfdbfe','#22d3ee']" %>;
+        for (var i = 0; i < 70; i++) {
+          var s = document.createElement('span');
+          s.style.left = Math.random() * 100 + '%';
+          s.style.background = colors[i % colors.length];
+          s.style.animationDelay = (Math.random() * 1.4) + 's';
+          s.style.animationDuration = (2.6 + Math.random() * 2.2) + 's';
+          s.style.transform = 'rotate(' + Math.random() * 360 + 'deg)';
+          c.appendChild(s);
+        }
+      })();
+    </script>
+  <% } %>
+
+  <script src="/js/social-menu.js"></script>
+  <script src="/js/auto-login-badge.js"></script>
+</body>
+</html>

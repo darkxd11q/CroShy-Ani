@@ -63,11 +63,20 @@ fetch('/api/me')
     return r.json();
   })
   .then((me) => {
-    userGreeting.textContent = `Merhaba, ${me.username}`;
+    if (me.premiumRole) {
+      const premiumIcon = me.premiumRole === 'special' ? '💜' : '💠';
+      userGreeting.textContent = `${premiumIcon} Hoş geldin, ${me.username}`;
+      userGreeting.classList.add('greeting-' + me.premiumRole);
+      showPremiumWelcome(me);
+    } else {
+      userGreeting.textContent = `Merhaba, ${me.username}`;
+    }
     remainingToday = me.remainingToday;
     myLimits = me;
 
-    fileHint.textContent = `JPG, PNG, MP4, MOV… — foto en fazla ${formatMb(me.maxImageBytes)}, video en fazla ${formatMb(me.maxVideoBytes)} / ${formatTime(me.maxVideoDurationSec)}`;
+    fileHint.textContent = me.unlimited
+      ? 'JPG, PNG, MP4, MOV… — dosya boyutu ve süre sınırın yok ✨'
+      : `JPG, PNG, MP4, MOV… — foto en fazla ${formatMb(me.maxImageBytes)}, video en fazla ${formatMb(me.maxVideoBytes)} / ${formatTime(me.maxVideoDurationSec)}`;
 
     const limitNote = me.hasCustomLimits ? ' · Senin için özel sınırlar tanımlı ✨' : '';
 
@@ -75,6 +84,8 @@ fetch('/api/me')
       quotaInfo.textContent = `Bugünkü gönderme hakkını kullandın (günde en fazla ${me.dailyLimit} anı). Yarın tekrar deneyebilirsin.`;
       submitBtn.disabled = true;
       submitBtn.textContent = 'Bugünlük hakkın doldu';
+    } else if (me.unlimited) {
+      quotaInfo.textContent = 'Sınırsız gönderim hakkın var ✨ — hiçbir sınıra takılmıyorsun.';
     } else {
       quotaInfo.textContent = `Bugün için ${remainingToday}/${me.dailyLimit} gönderme hakkın kaldı.${limitNote}`;
     }
@@ -325,7 +336,7 @@ form.addEventListener('submit', async (e) => {
     progressBar.style.display = 'none';
     progressSpan.style.width = '0%';
 
-    if (typeof remainingToday === 'number') {
+    if (typeof remainingToday === 'number' && !(myLimits && myLimits.unlimited)) {
       remainingToday -= 1;
       if (remainingToday <= 0) {
         quotaInfo.textContent = 'Bugünkü gönderme hakkını kullandın. Yarın tekrar deneyebilirsin.';
@@ -362,4 +373,38 @@ function uploadWithProgress(url, formData, onProgress) {
     xhr.onerror = () => reject(new Error('Ağ hatası.'));
     xhr.send(formData);
   });
+}
+
+
+// ÖZEL / Plus üyelere, oturum başına bir kere gösterilen kişiye özel karşılama.
+function showPremiumWelcome(me) {
+  try {
+    if (sessionStorage.getItem('croshy_premium_welcome')) return;
+    sessionStorage.setItem('croshy_premium_welcome', '1');
+  } catch {}
+
+  const isSpecial = me.premiumRole === 'special';
+  const el = document.createElement('div');
+  el.className = 'premium-welcome premium-' + me.premiumRole;
+
+  const icon = document.createElement('span');
+  icon.className = 'pw-icon';
+  icon.textContent = isSpecial ? '💜' : '💠';
+
+  const box = document.createElement('div');
+  const title = document.createElement('div');
+  title.className = 'pw-title';
+  title.textContent = `Hoş geldin, ${me.username}!`;
+  const sub = document.createElement('div');
+  sub.className = 'pw-sub';
+  sub.textContent = `${isSpecial ? 'ÖZEL' : 'Plus'} üyemizsin — bu sayfa senin için biraz daha geniş ✨`;
+  box.append(title, sub);
+
+  el.append(icon, box);
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 700);
+  }, 4600);
 }

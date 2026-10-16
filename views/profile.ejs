@@ -6,6 +6,7 @@
 <title>Profilim — CroShy Anı</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/img/logo-64.png" />
 <link rel="apple-touch-icon" href="/img/logo-192.png" />
+<script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
 <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
@@ -73,7 +74,7 @@
 
     <div class="upload-card" style="margin: 18px 0 20px;">
       <div class="profile-hero">
-        <div class="profile-avatar"><%= username.charAt(0).toUpperCase() %></div>
+        <div class="profile-avatar <%= badges.includes('special') ? 'avatar-special' : (badges.includes('plus') ? 'avatar-plus' : '') %>"><%= username.charAt(0).toUpperCase() %></div>
         <div class="profile-identity">
           <div class="profile-name-row">
             <span class="profile-name"><%= username %></span>
@@ -89,6 +90,7 @@
           <% } %>
           <div class="profile-joined"><% if (createdAt) { %>Katılma: <%= new Date(createdAt).toLocaleDateString('tr-TR') %><% } %></div>
           <div class="profile-actions">
+            <a href="/redeem" class="btn small">🎟️ Kod Kullan</a>
             <a href="/u/<%= encodeURIComponent(username) %>" class="btn ghost small">Herkese Açık Halini Gör ↗</a>
           </div>
         </div>
@@ -117,6 +119,13 @@
         </div>
       </div>
     </div>
+
+    <% if (locals.premium) { %>
+      <div class="premium-banner">
+        <span class="icon"><%= badges.includes('special') ? '💜' : '💠' %></span>
+        <span><strong><%= badges.includes('special') ? 'ÖZEL' : 'Plus' %> üyelik avantajların:</strong> yükleme sınırların %50 daha yüksek, günde en az 3 anı paylaşabiliyorsun ve 3 ekstra temayı kullanabiliyorsun.</span>
+      </div>
+    <% } %>
 
     <% if (limits.unlimited) { %>
       <div class="unlimited-banner">
@@ -159,6 +168,34 @@
               </form>
             </div>
           <% }) %>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="upload-card" style="margin-bottom: 20px;">
+      <h2 class="profile-section-title">🎨 Temalar</h2>
+      <% var THEME_OPTIONS = [
+        { id: '', name: 'Varsayılan', sw: ['#8b5cf6', '#ec4899', '#22d3ee'] },
+        { id: 'ocean', name: 'Okyanus', sw: ['#0ea5e9', '#06b6d4', '#5eead4'] },
+        { id: 'sunset', name: 'Gün Batımı', sw: ['#f97316', '#ec4899', '#fbbf24'] },
+        { id: 'emerald', name: 'Zümrüt', sw: ['#10b981', '#34d399', '#a3e635'] }
+      ]; %>
+      <% if (locals.premium) { %>
+        <p class="profile-section-sub">Sitenin görünümünü sana özel renklerle değiştir.</p>
+        <form method="POST" action="/profile/update-theme">
+          <div class="theme-grid">
+            <% THEME_OPTIONS.forEach(function(t) { %>
+              <button type="submit" name="theme" value="<%= t.id %>" class="theme-option <%= (theme || '') === t.id ? 'active' : '' %>">
+                <div class="theme-swatch"><% t.sw.forEach(function(c) { %><span style="background:<%= c %>"></span><% }) %></div>
+                <div class="theme-name"><%= t.name %></div>
+              </button>
+            <% }) %>
+          </div>
+        </form>
+      <% } else { %>
+        <div class="theme-teaser">
+          <span>🔒 Ekstra temalar <strong>ÖZEL</strong> ve <strong>Plus</strong> üyelere özel.</span>
+          <a href="/redeem" class="btn small">🎟️ Kodum Var</a>
         </div>
       <% } %>
     </div>

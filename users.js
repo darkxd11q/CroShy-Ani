@@ -7,6 +7,7 @@ function fromRow(row) {
     passwordHash: row.password_hash,
     createdAt: row.created_at,
     bio: row.bio || '',
+    theme: row.theme || null,
     badges: Array.isArray(row.badges) ? row.badges : [],
     customImageBytes: row.custom_image_bytes != null ? Number(row.custom_image_bytes) : null,
     customVideoBytes: row.custom_video_bytes != null ? Number(row.custom_video_bytes) : null,
@@ -62,6 +63,12 @@ async function updatePasswordHash(userId, newHash) {
 
 async function updateBio(userId, bio) {
   const { error } = await supabase.from('app_users').update({ bio: (bio || '').slice(0, 160) }).eq('id', userId);
+  if (error) throw error;
+}
+
+// ÖZEL/Plus üyelerin seçebildiği alternatif site teması (null = varsayılan).
+async function updateTheme(userId, theme) {
+  const { error } = await supabase.from('app_users').update({ theme: theme || null }).eq('id', userId);
   if (error) throw error;
 }
 
@@ -191,6 +198,7 @@ module.exports = {
   createUser,
   updatePasswordHash,
   updateBio,
+  updateTheme,
   setCustomLimits,
   clearCustomLimits,
   listUsersWithCustomLimits,

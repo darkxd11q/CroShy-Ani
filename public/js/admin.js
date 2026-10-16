@@ -277,3 +277,125 @@ async function handleUnban(ip, btn) {
     btn.disabled = false;
   }
 }
+
+
+// ---------- Rozet kodu oluşturucu (havalı açılış animasyonlu) ----------
+(function () {
+  const card = document.getElementById('codegenCard');
+  if (!card) return;
+
+  const display = document.getElementById('codeDisplay');
+  const meta = document.getElementById('codeMeta');
+  const genBtn = document.getElementById('generateCodeBtn');
+  const copyBtn = document.getElementById('copyCodeBtn');
+  const chips = card.querySelectorAll('.role-chip');
+  const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  const rand = () => LETTERS[Math.floor(Math.random() * LETTERS.length)];
+
+  let badge = 'special';
+  let currentCode = '';
+
+  chips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      chips.forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      badge = chip.dataset.badge;
+      card.classList.remove('glow-special', 'glow-plus');
+      card.classList.add('glow-' + badge);
+    });
+  });
+
+  // Her karakter önce karışık harflerle "döner", sonra sırayla yerine kilitlenir.
+  function reveal(code) {
+    display.innerHTML = '';
+    [...code].forEach((ch, i) => {
+      const span = document.createElement('span');
+      span.className = 'code-char';
+      span.textContent = ch === '-' ? '-' : rand();
+      display.appendChild(span);
+
+      let ticks = 0;
+      const total = 8 + i * 2;
+      const iv = setInterval(() => {
+        ticks++;
+        if (ticks >= total) {
+          span.textContent = ch;
+          span.classList.add('locked');
+          clearInterval(iv);
+        } else if (ch !== '-') {
+          span.textContent = rand();
+        }
+      }, 45);
+    });
+  }
+
+  function prependRow(data) {
+    const list = document.getElementById('codes-list');
+    if (!list) return;
+    const empty = list.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    const row = document.createElement('div');
+    row.className = 'pending-item';
+    row.style.alignItems = 'center';
+
+    const info = document.createElement('div');
+    info.className = 'info';
+    const name = document.createElement('div');
+    name.className = 'name badge-holder-row';
+    const mono = document.createElement('span');
+    mono.className = 'code-mono';
+    mono.textContent = data.code;
+    const pill = document.createElement('span');
+    pill.className = 'badge-pill badge-' + data.badge;
+    pill.textContent = data.icon + ' ' + data.label;
+    const status = document.createElement('span');
+    status.className = 'code-status active';
+    status.textContent = 'Aktif';
+    name.append(mono, pill, status);
+    const date = document.createElement('div');
+    date.className = 'date';
+    date.textContent = 'Az önce oluşturuldu · 24 saat geçerli';
+    info.append(name, date);
+    row.append(info);
+    list.prepend(row);
+  }
+
+  genBtn.addEventListener('click', async () => {
+    genBtn.disabled = true;
+    copyBtn.style.display = 'none';
+    meta.textContent = 'Kod üretiliyor…';
+    try {
+      const data = await adminFetch('/api/admin/redeem-codes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ badge }),
+      });
+      currentCode = data.code;
+      card.classList.remove('glow-special', 'glow-plus');
+      card.classList.add('glow-' + data.badge);
+      reveal(data.code);
+      setTimeout(() => {
+        meta.textContent = `${data.icon} ${data.label} · tek kullanımlık · 24 saat geçerli`;
+        copyBtn.style.display = '';
+        copyBtn.textContent = '📋 Kopyala';
+      }, 8 * 45 + data.code.length * 2 * 45 + 200);
+      prependRow(data);
+    } catch (err) {
+      meta.textContent = 'Hata: ' + err.message;
+    } finally {
+      setTimeout(() => (genBtn.disabled = false), 600);
+    }
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!currentCode) return;
+    try {
+      await navigator.clipboard.writeText(currentCode);
+      copyBtn.textContent = '✅ Kopyalandı!';
+    } catch {
+      copyBtn.textContent = 'Kopyalanamadı — elle seç';
+    }
+    setTimeout(() => (copyBtn.textContent = '📋 Kopyala'), 2000);
+  });
+})();
