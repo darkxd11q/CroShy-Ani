@@ -15,6 +15,7 @@ const likes = require('./likes');
 const viewsStore = require('./views_store');
 const rememberTokens = require('./rememberTokens');
 const redeemCodes = require('./redeemCodes');
+const awards = require('./awards');
 const settings = require('./settings');
 const {
   safeStringEqual,
@@ -65,6 +66,10 @@ const PREMIUM_BADGES = ['special', 'plus'];
 const PREMIUM_LIMIT_MULTIPLIER = 1.5;
 const PREMIUM_DAILY_LIMIT = 3;
 const PREMIUM_THEMES = ['ocean', 'sunset', 'emerald'];
+// Haftalık rozet kazananlara 15 gün boyunca açılan 2 ekstra tema
+const BASE_THEMES = PREMIUM_THEMES;
+const REWARD_THEMES = ['aurora', 'royal'];
+const REWARD_THEME_MS = 15 * 24 * 60 * 60 * 1000;
 
 function hasPremium(user) {
   return !!(user && Array.isArray(user.badges) && user.badges.some((b) => PREMIUM_BADGES.includes(b)));
@@ -117,6 +122,8 @@ function sha256(str) {
 // Rozet kodu: "DARK-1907-" + 8 rastgele büyük/küçük harf (örn. DARK-1907-MjFoBdgQ).
 // Büyük/küçük harf ayrımı önemlidir. crypto.randomInt kriptografik olarak
 // güvenli rastgelelik sağlar (Math.random tahmin edilebilir olurdu).
+// Cloudinary URL'si: sadece güvenli karakterler (tırnak, boşluk, < > yok) — XSS'e karşı.
+const SAFE_CLOUD_URL = /^https:\/\/res\.cloudinary\.com\/[A-Za-z0-9_\-\/.,:%~]+$/;
 const CODE_PREFIX = 'DARK-1907-';
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const CODE_VALID_MS = 24 * 60 * 60 * 1000; // 1 gün
@@ -129,17 +136,33 @@ function generateRedeemCode() {
 
 // Premium kullanıcının seçtiği temayı (varsa) tarayıcıya çerez olarak yazar;
 // her sayfanın <head>'indeki küçük script bunu okuyup temayı anında uygular.
-function syncThemeCookie(res, user) {
-  if (hasPremium(user) && user.theme && PREMIUM_THEMES.includes(user.theme)) {
-    res.cookie('croshy_theme', user.theme, {
-      httpOnly: false,
-      sameSite: 'lax',
-      secure: isProd,
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
-  } else {
-    res.clearCookie('croshy_theme', { path: '/' });
+// Tema erişimi: ÖZEL/Plus (ve sınırsız hesaplar: Site Kurucusu/CroShy) 3 temel
+// temayı, haftalık rozet kazananlar ayrıca 15 gün boyunca 2 ödül temasını kullanır.
+function allowedThemesFor(user, rewardExpiry) {
+  const list = [];
+  if (hasPremium(user) || hasFullExemption(user)) list.push(...BASE_THEMES);
+  if (rewardExpiry && rewardExpiry > Date.now()) list.push(...REWARD_THEMES);
+  return list;
+}
+
+// Seçilen temayı tarayıcıya çerez olarak yazar; her sayfanın <head>'indeki
+// küçük script bunu okuyup temayı anında uygular. Ödül temalarının çerezi
+// ödül bittiği anda kendiliğinden silinsin diye tam o ana kadar yaşar.
+function setThemeCookie(res, theme, rewardExpiry) {
+  if (!theme) return res.clearCookie('croshy_theme', { path: '/' });
+  const isReward = REWARD_THEMES.includes(theme);
+  const maxAge = isReward ? Math.max(1000, (rewardExpiry || 0) - Date.now()) : 365 * 24 * 60 * 60 * 1000;
+  res.cookie('croshy_theme', theme, { httpOnly: false, sameSite: 'lax', secure: isProd, maxAge, path: '/' });
+}
+
+async function syncThemeCookie(res, user) {
+  try {
+    if (!user || !user.theme) return res.clearCookie('croshy_theme', { path: '/' });
+    const rewardExpiry = REWARD_THEMES.includes(user.theme) ? await awards.getRewardExpiry(user.id) : 0;
+    if (allowedThemesFor(user, rewardExpiry).includes(user.theme)) setThemeCookie(res, user.theme, rewardExpiry);
+    else res.clearCookie('croshy_theme', { path: '/' });
+  } catch (e) {
+    console.error('Tema çerezi senkronize edilemedi:', e.message);
   }
 }
 
@@ -322,7 +345,7 @@ function effectiveLimitsFor(user, globalSettings) {
       videoDurationSec: NO_LIMIT,
       dailyLimit: NO_LIMIT,
       unlimited: true,
-      premium: false,
+      premium: hasPremium(user),
     };
   }
 
@@ -378,6 +401,79 @@ async function purgeExpiredDeletions() {
   }
 }
 
+// ---------- Haftalık rozetler (her Cuma 17:15, Türkiye saati) ----------
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TR_OFFSET_MS = 3 * 60 * 60 * 1000; // Europe/Istanbul = UTC+3 (yaz saati uygulaması yok)
+
+// Verilen andan önceki (ya da o ana eşit) en son Cuma 17:15'in (TR) UTC zamanı.
+function latestAwardTime(nowMs) {
+  const local = new Date(nowMs + TR_OFFSET_MS); // UTC alanları = TR yerel saati
+  const d = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 17, 15, 0));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() - 5 + 7) % 7));
+  let t = d.getTime();
+  if (t > local.getTime()) t -= 7 * DAY_MS;
+  return t - TR_OFFSET_MS;
+}
+
+async function runWeeklyAward(T) {
+  const { topSubmitter, topLiked } = await awards.computeWinners(T - 7 * DAY_MS, T);
+
+  // Geçen haftanın sahiplerinden rozetleri geri al
+  const holders = await users.listUsersWithBadges();
+  for (const u of holders) {
+    for (const b of ['weekly_active', 'weekly_liked']) {
+      if (u.badges.includes(b)) await users.revokeBadge(u.username, b);
+    }
+  }
+
+  const now = Date.now();
+  for (const [badge, w] of [['weekly_active', topSubmitter], ['weekly_liked', topLiked]]) {
+    if (!w) continue;
+    const winner = await users.findUserById(w.userId);
+    if (!winner) continue;
+    await users.grantBadge(winner.username, badge);
+    await awards.record({
+      userId: winner.id,
+      username: winner.username,
+      badge,
+      weekEnd: T,
+      submissions: w.submissions,
+      likes: w.likes,
+      awardedAt: now,
+      themeExpiresAt: now + REWARD_THEME_MS,
+    });
+  }
+}
+
+let weeklyRunning = false;
+let lastWeeklyErrLog = 0;
+// Sunucu uyuyup geç uyansa bile kaçırılmasın diye her dakika kontrol edilir;
+// DB'de tutulan "son dağıtım" zamanı sayesinde her hafta yalnızca bir kez çalışır.
+async function checkWeeklyAward() {
+  if (weeklyRunning) return;
+  weeklyRunning = true;
+  let prev = null;
+  try {
+    const T = latestAwardTime(Date.now());
+    prev = await settings.claimWeeklyAward(T);
+    if (prev === null) return;
+    await runWeeklyAward(T);
+    console.log('🏅 Haftalık rozetler dağıtıldı.');
+  } catch (e) {
+    if (prev !== null) {
+      try {
+        await settings.restoreWeeklyAward(prev);
+      } catch {}
+    }
+    if (Date.now() - lastWeeklyErrLog > 60 * 60 * 1000) {
+      lastWeeklyErrLog = Date.now();
+      console.error('Haftalık rozet dağıtımı hatası:', e.message);
+    }
+  } finally {
+    weeklyRunning = false;
+  }
+}
+
 // ---------- Yardımcı middleware'ler ----------
 
 function requireAdminPage(req, res, next) {
@@ -406,7 +502,24 @@ function requireSuperAdminApi(req, res, next) {
 
 function requireUserPage(req, res, next) {
   if (req.session && req.session.userId) return next();
-  return res.redirect('/login');
+  // Giriş yaptıktan sonra kullanıcıyı geldiği sayfaya geri döndür (örn. /redeem)
+  const back = req.method === 'GET' ? req.originalUrl : '/profile';
+  return res.redirect('/login?next=' + encodeURIComponent(back));
+}
+
+// Açık yönlendirme (open redirect) saldırısını önlemek için sadece site içi,
+// "/" ile başlayan yollara izin verilir.
+function safeNext(n) {
+  return typeof n === 'string' && n.length < 200 && n.startsWith('/') && !n.startsWith('//') && !n.includes('\\')
+    ? n
+    : null;
+}
+
+function resolveNext(req, res) {
+  const fromBody = safeNext(req.body && req.body.next);
+  const fromCookie = safeNext(getCookie(req, 'croshy_next'));
+  res.clearCookie('croshy_next', { path: '/' });
+  return fromBody || fromCookie || '/upload';
 }
 
 function requireUserApi(req, res, next) {
@@ -434,10 +547,11 @@ app.get(
   '/api/approved',
   asyncRoute(async (req, res) => {
     const ip = req.ip;
-    const [items, likeCounts, likedByMe] = await Promise.all([
+    const [items, likeCounts, likedByMe, avatarMap] = await Promise.all([
       db.getApprovedItems(),
       likes.getAllCounts(),
       likes.getLikedSetForIp(ip),
+      users.getAllAvatars(),
     ]);
 
     const validSorts = ['oldest', 'likes', 'newest', 'algorithm'];
@@ -447,6 +561,7 @@ app.get(
       ...rest,
       likes: likeCounts[rest.id] || 0,
       likedByMe: likedByMe.has(rest.id),
+      uploaderAvatar: avatarMap[rest.uploaderName] || null,
     }));
 
     if (sort === 'oldest') {
@@ -555,7 +670,7 @@ app.post(
     if (type !== 'image' && type !== 'video') {
       return res.status(400).json({ error: 'Geçersiz medya türü.' });
     }
-    if (!/^https:\/\/res\.cloudinary\.com\//.test(url)) {
+    if (!SAFE_CLOUD_URL.test(url)) {
       return res.status(400).json({ error: 'Geçersiz medya kaynağı.' });
     }
     if (!cleanCaption) {
@@ -646,9 +761,13 @@ app.post(
 // ---------- Kullanıcı girişi / kaydı ----------
 
 app.get('/login', (req, res) => {
+  const next = safeNext(req.query.next);
+  if (next) {
+    res.cookie('croshy_next', next, { httpOnly: true, sameSite: 'lax', secure: isProd, maxAge: 15 * 60 * 1000, path: '/' });
+  }
   // Otomatik giriş middleware'i bu isteğe kadar oturumu zaten kurmuş olabilir
-  if (req.session && req.session.userId) return res.redirect('/upload');
-  res.render('login', { error: null });
+  if (req.session && req.session.userId) return res.redirect(next || '/upload');
+  res.render('login', { error: null, next: next || '' });
 });
 
 app.post(
@@ -685,9 +804,12 @@ app.post(
         if (err) return res.render('login', { error: 'Bir hata oluştu, tekrar dene.' });
         req.session.userId = user.id;
         req.session.username = user.username;
-        issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
-        syncThemeCookie(res, user);
-        res.redirect('/upload');
+        // "Beni hatırla" işaretliyse 3 aya kadar (90 gün) hatırlanır.
+        if (req.body.remember) {
+          issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+        }
+        await syncThemeCookie(res, user);
+        res.redirect(resolveNext(req, res));
       } catch (e) {
         console.error('Giriş sonrası hata:', e.message);
         if (!res.headersSent) res.render('login', { error: 'Bir hata oluştu, tekrar dene.' });
@@ -745,9 +867,12 @@ app.post(
         if (err) return res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });
         req.session.userId = user.id;
         req.session.username = user.username;
-        issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
-        syncThemeCookie(res, user);
-        res.redirect('/upload');
+        // "Beni hatırla" işaretliyse 3 aya kadar (90 gün) hatırlanır.
+        if (req.body.remember) {
+          issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
+        }
+        await syncThemeCookie(res, user);
+        res.redirect(resolveNext(req, res));
       } catch (e) {
         console.error('Kayıt sonrası hata:', e.message);
         if (!res.headersSent) res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });
@@ -819,12 +944,14 @@ app.post(
         req.session.isAdmin = true;
         req.session.adminRole = matchedRole;
         req.session.username = loggedInUsername;
-        issueRememberCookie(res, {
-          subjectType: 'admin',
-          subjectId: 'admin',
-          username: loggedInUsername,
-          role: matchedRole,
-        });
+        if (req.body.remember) {
+          issueRememberCookie(res, {
+            subjectType: 'admin',
+            subjectId: 'admin',
+            username: loggedInUsername,
+            role: matchedRole,
+          });
+        }
         res.redirect('/admin');
       } catch (e) {
         console.error('Admin girişi sonrası hata:', e.message);
@@ -887,7 +1014,7 @@ app.get(
       isSuperAdmin ? users.listUsersWithCustomLimits() : Promise.resolve([]),
       isSuperAdmin ? getSettingsSafe() : Promise.resolve(FALLBACK_SETTINGS),
       isSuperAdmin ? users.listUsersWithBadges() : Promise.resolve([]),
-      isSuperAdmin ? users.getWeeklyLeaderboard() : Promise.resolve({ topSubmitters: [], topLiked: [] }),
+      isSuperAdmin ? users.getWeeklyLeaderboard(latestAwardTime(Date.now())) : Promise.resolve({ topSubmitters: [], topLiked: [] }),
       isSuperAdmin ? db.getApprovedItems() : Promise.resolve([]),
       isSuperAdmin ? likes.getAllCounts() : Promise.resolve({}),
       isSuperAdmin ? db.getDeletedItems() : Promise.resolve([]),
@@ -1169,6 +1296,9 @@ async function buildOwnProfileData(userId, username) {
   const totalLikes = approvedItems.reduce((sum, i) => sum + (likeCounts[i.id] || 0), 0);
   const limits = effectiveLimitsFor(user, globalSettings);
 
+  const rewardExpiry = await awards.getRewardExpiry(userId);
+  const allowedThemes = allowedThemesFor(user, rewardExpiry);
+
   const items = myItems.map((i) => ({ ...i, likes: likeCounts[i.id] || 0 }));
 
   return {
@@ -1186,6 +1316,11 @@ async function buildOwnProfileData(userId, username) {
     limits,
     premium: !!limits.premium,
     theme: user ? user.theme : null,
+    allowedThemes,
+    canThemes: allowedThemes.length > 0,
+    rewardExpiry,
+    avatarUrl: user ? user.avatarUrl : null,
+    canGif: canUseGifAvatar(user),
     hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
     error: null,
     success: null,
@@ -1272,6 +1407,7 @@ app.get(
 
     res.render('public-profile', {
       profileUsername: user.username,
+      avatarUrl: user.avatarUrl,
       bio: user.bio,
       badges: user.badges,
       BADGE_INFO,
@@ -1306,6 +1442,8 @@ app.post(
     }
 
     const raw = (req.body.code || '').toString().trim();
+    // Kod yerine "admin" yazılırsa admin GİRİŞ sayfasına yönlendir.
+    if (raw.toLowerCase() === 'admin') return res.redirect('/admin/login');
     const fail = (msg) => {
       redeemGuard.registerFailedAttempt(ip);
       return res.render('redeem', { error: msg, success: null });
@@ -1344,29 +1482,148 @@ app.post(
   '/profile/update-theme',
   requireUserPage,
   asyncRoute(async (req, res) => {
-    const user = await users.findUserById(req.session.userId);
+    const [user, rewardExpiry] = await Promise.all([
+      users.findUserById(req.session.userId),
+      awards.getRewardExpiry(req.session.userId),
+    ]);
     const theme = (req.body.theme || '').toString().trim();
     const renderWith = async (extra) => {
       const data = await buildOwnProfileData(req.session.userId, req.session.username);
       return res.render('profile', { ...data, ...extra });
     };
 
-    if (!hasPremium(user)) return renderWith({ error: 'Tema seçimi sadece ÖZEL ve Plus üyelere açık.' });
-    if (theme && !PREMIUM_THEMES.includes(theme)) return renderWith({ error: 'Geçersiz tema.' });
+    const allowed = allowedThemesFor(user, rewardExpiry);
+    if (theme && !allowed.includes(theme)) {
+      return renderWith({
+        error: REWARD_THEMES.includes(theme)
+          ? 'Bu tema sadece haftalık rozet kazananlara özel (kazandıktan sonra 15 gün).'
+          : 'Tema seçimi sadece ÖZEL ve Plus üyelere açık.',
+      });
+    }
 
     await users.updateTheme(user.id, theme || null);
-    if (theme) {
-      res.cookie('croshy_theme', theme, {
-        httpOnly: false,
-        sameSite: 'lax',
-        secure: isProd,
-        maxAge: 365 * 24 * 60 * 60 * 1000,
-        path: '/',
-      });
-    } else {
-      res.clearCookie('croshy_theme', { path: '/' });
-    }
+    setThemeCookie(res, theme, rewardExpiry);
     return renderWith({ success: theme ? 'Tema uygulandı.' : 'Varsayılan temaya dönüldü.' });
+  })
+);
+
+// ---------- Profil fotoğrafı ----------
+// Statik görseller herkese açık (en fazla 5 MB); GIF sadece ÖZEL/Plus (ve
+// sınırsız hesaplar) için, en fazla 8 MB. Görsel tarayıcıdan doğrudan
+// Cloudinary'e yüklenir, burada sadece doğrulanıp kaydedilir.
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+const AVATAR_GIF_MAX_BYTES = 8 * 1024 * 1024;
+const avatarLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 12,
+  message: 'Çok fazla profil fotoğrafı değişikliği yaptın. Lütfen daha sonra tekrar dene.',
+});
+
+function canUseGifAvatar(user) {
+  return hasPremium(user) || hasFullExemption(user);
+}
+
+app.post(
+  '/api/profile/avatar',
+  requireUserApi,
+  avatarLimiter,
+  asyncRoute(async (req, res) => {
+    const { url, publicId, bytes, format } = req.body;
+    const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+    const fmt = String(format || '').toLowerCase();
+    const destroyUploaded = async () => {
+      if (!publicId) return;
+      try {
+        await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+      } catch (e) {
+        console.error('Cloudinary silme hatası (avatar):', e.message);
+      }
+    };
+
+    if (!url || !publicId || !SAFE_CLOUD_URL.test(url) || (cloud && !url.startsWith(`https://res.cloudinary.com/${cloud}/`))) {
+      return res.status(400).json({ error: 'Geçersiz görsel kaynağı.' });
+    }
+    if (!['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(fmt)) {
+      await destroyUploaded();
+      return res.status(400).json({ error: 'Desteklenmeyen görsel türü.' });
+    }
+
+    const user = await users.findUserById(req.session.userId);
+    const isGif = fmt === 'gif';
+    if (isGif && !canUseGifAvatar(user)) {
+      await destroyUploaded();
+      return res.status(403).json({ error: 'GIF profil fotoğrafı sadece ÖZEL ve Plus üyelere açık.' });
+    }
+    const limit = isGif ? AVATAR_GIF_MAX_BYTES : AVATAR_MAX_BYTES;
+    if (typeof bytes === 'number' && bytes > limit) {
+      await destroyUploaded();
+      return res.status(413).json({ error: `Profil fotoğrafı en fazla ${(limit / (1024 * 1024)).toFixed(0)} MB olabilir.` });
+    }
+
+    const oldPublicId = user && user.avatarPublicId;
+    await users.setAvatar(user.id, { url, publicId });
+    if (oldPublicId && oldPublicId !== publicId) {
+      try {
+        await cloudinary.uploader.destroy(oldPublicId, { resource_type: 'image' });
+      } catch (e) {
+        console.error('Eski avatar silinemedi:', e.message);
+      }
+    }
+    res.json({ ok: true, avatarUrl: url });
+  })
+);
+
+app.post(
+  '/api/profile/avatar/remove',
+  requireUserApi,
+  asyncRoute(async (req, res) => {
+    const user = await users.findUserById(req.session.userId);
+    if (user && user.avatarPublicId) {
+      try {
+        await cloudinary.uploader.destroy(user.avatarPublicId, { resource_type: 'image' });
+      } catch (e) {
+        console.error('Avatar silinemedi:', e.message);
+      }
+    }
+    await users.clearAvatar(req.session.userId);
+    res.json({ ok: true });
+  })
+);
+
+// ---------- Haftalık ödül kutlama ekranı ----------
+// Siteye giriş yapmış kullanıcı için henüz görmediği ödül varsa döndürür.
+// (Boşsa 5 dakikada bir kontrol edilir; gereksiz veritabanı sorgusu olmasın.)
+app.get(
+  '/api/pending-award',
+  asyncRoute(async (req, res) => {
+    if (!req.session || !req.session.userId) return res.json({ awards: [] });
+    if (Date.now() - (req.session.awardCheckedAt || 0) < 5 * 60 * 1000) return res.json({ awards: [] });
+
+    const list = await awards.getUnseenForUser(req.session.userId);
+    if (list.length === 0) req.session.awardCheckedAt = Date.now();
+
+    res.json({
+      awards: list.map((a) => ({
+        id: a.id,
+        badge: a.badge,
+        label: BADGE_INFO[a.badge].label,
+        icon: BADGE_INFO[a.badge].icon,
+        submissions: a.submissions,
+        likes: a.likes,
+        weekEnd: a.weekEnd,
+        themeExpiresAt: a.themeExpiresAt,
+      })),
+    });
+  })
+);
+
+app.post(
+  '/api/award-seen',
+  requireUserApi,
+  asyncRoute(async (req, res) => {
+    await awards.markSeenForUser(req.session.userId);
+    req.session.awardCheckedAt = Date.now();
+    res.json({ ok: true });
   })
 );
 
@@ -1380,4 +1637,6 @@ app.listen(PORT, () => {
   console.log(`✨ CroShy Anı http://localhost:${PORT} adresinde çalışıyor`);
   purgeExpiredDeletions();
   setInterval(purgeExpiredDeletions, 30 * 60 * 1000).unref();
+  setTimeout(checkWeeklyAward, 20 * 1000).unref();
+  setInterval(checkWeeklyAward, 60 * 1000).unref();
 });

@@ -32,6 +32,9 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
   paylaştığı anıları ve topladığı beğenileri görebilirsin
 - Rozet sistemi — kayıt olan herkes bir rozet kazanır, bazı özel rozetler sahibine ekstra ayrıcalıklar tanır
 - **ÖZEL** ve **Plus** üyelik — özel kodlarla açılan premium roller: daha yüksek yükleme sınırları, günlük daha fazla paylaşım, ekstra renk temaları ve kişiye özel bir karşılama deneyimi
+- Herkes kendine özel **profil fotoğrafı** ekleyebilir (yuvarlak alan sürükle-yakınlaştır ile ayarlanır, yüklenmeden önce kalite bozulmadan sıkıştırılır); ÖZEL ve Plus üyeler **GIF** profil fotoğrafı da kullanabilir
+- Ana sayfadan tek tıkla giriş yapma / kayıt olma, "beni hatırla" ile 3 aya kadar otomatik giriş
+- **Haftanın Aktifi** ve **Haftanın Beğenileni** rozetleri her Cuma 17:15'te otomatik verilir; kazananı havalı bir kutlama ekranı karşılar ve 15 gün boyunca 2 ekstra tema kazanır
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**

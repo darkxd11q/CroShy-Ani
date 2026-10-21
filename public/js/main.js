@@ -1,4 +1,7 @@
 // ---------- Açılış animasyonu ----------
+// Not: logo yazısı CSS ile başta gizli (#introLogo { visibility: hidden }).
+// Font yüklenip harfler hazırlanınca görünür yapılıyor — böylece sayfa
+// açılırken beyaz/düz bir "CroShy Anı" yazısı çakılıp sonra renklenmiyor.
 function splitIntroLetters() {
   const el = document.getElementById('introLogo');
   if (!el) return;
@@ -13,22 +16,33 @@ function splitIntroLetters() {
     } else {
       span.className = 'letter';
       span.textContent = ch;
-      span.style.animationDelay = letterIndex * 0.045 + 's';
+      span.style.animationDelay = letterIndex * 0.035 + 's';
       letterIndex++;
     }
     el.appendChild(span);
   });
+  el.classList.add('ready');
 }
-splitIntroLetters();
 
-window.addEventListener('load', () => {
+let introHidden = false;
+function hideIntro() {
+  if (introHidden) return;
+  introHidden = true;
   const intro = document.getElementById('intro');
-  setTimeout(() => {
-    intro.classList.add('hide');
-    document.body.classList.remove('no-scroll');
-    setTimeout(() => intro.remove(), 900);
-  }, 2200);
-});
+  document.body.classList.remove('no-scroll');
+  if (!intro) return;
+  intro.classList.add('hide');
+  setTimeout(() => intro.remove(), 800);
+}
+
+(function startIntro() {
+  const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+  Promise.race([fontsReady, new Promise((r) => setTimeout(r, 450))]).then(() => {
+    splitIntroLetters();
+    setTimeout(hideIntro, 1400);
+  });
+  setTimeout(hideIntro, 3500); // ne olursa olsun takılı kalmasın
+})();
 
 // ---------- Çapraz kaydırmalı anı zaman çizgisi ----------
 const TIMELINE = document.getElementById('memory-timeline');
@@ -52,6 +66,9 @@ function renderMedia(item) {
 
 function renderRow(item, index) {
   const side = index % 2 === 0 ? 'left' : 'right';
+  const avatarHtml = item.uploaderAvatar
+    ? '<img class="card-avatar" src="' + escapeHtml(item.uploaderAvatar) + '" alt="" />'
+    : '';
   return `
     <div class="memory-row ${side}">
       <span class="dot-marker"></span>
@@ -65,7 +82,7 @@ function renderRow(item, index) {
         </button>
         <div class="overlay">
           <div class="meta">
-            <div class="name"><a href="/u/${encodeURIComponent(item.uploaderName)}" class="uploader-link" onclick="event.stopPropagation()">${escapeHtml(item.uploaderName)}</a></div>
+            <div class="name card-uploader">${avatarHtml}<a href="/u/${encodeURIComponent(item.uploaderName)}" class="uploader-link" onclick="event.stopPropagation()">${escapeHtml(item.uploaderName)}</a></div>
             ${item.caption ? `<div class="caption">${escapeHtml(item.caption)}</div>` : ''}
           </div>
         </div>

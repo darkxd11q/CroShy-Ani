@@ -8,6 +8,8 @@ function fromRow(row) {
     createdAt: row.created_at,
     bio: row.bio || '',
     theme: row.theme || null,
+    avatarUrl: row.avatar_url || null,
+    avatarPublicId: row.avatar_public_id || null,
     badges: Array.isArray(row.badges) ? row.badges : [],
     customImageBytes: row.custom_image_bytes != null ? Number(row.custom_image_bytes) : null,
     customVideoBytes: row.custom_video_bytes != null ? Number(row.custom_video_bytes) : null,
@@ -64,6 +66,33 @@ async function updatePasswordHash(userId, newHash) {
 async function updateBio(userId, bio) {
   const { error } = await supabase.from('app_users').update({ bio: (bio || '').slice(0, 160) }).eq('id', userId);
   if (error) throw error;
+}
+
+// Profil fotoğrafı (Cloudinary URL'si + silebilmek için public id)
+async function setAvatar(userId, { url, publicId }) {
+  const { error } = await supabase
+    .from('app_users')
+    .update({ avatar_url: url, avatar_public_id: publicId })
+    .eq('id', userId);
+  if (error) throw error;
+}
+
+async function clearAvatar(userId) {
+  const { error } = await supabase
+    .from('app_users')
+    .update({ avatar_url: null, avatar_public_id: null })
+    .eq('id', userId);
+  if (error) throw error;
+}
+
+// Galeride gönderen adının yanında küçük profil fotoğrafı göstermek için:
+// sadece fotoğrafı olan kullanıcılar (küçük bir harita: kullanıcı adı -> url).
+async function getAllAvatars() {
+  const { data, error } = await supabase.from('app_users').select('username, avatar_url').not('avatar_url', 'is', null);
+  if (error) throw error;
+  const map = {};
+  for (const row of data || []) map[row.username] = row.avatar_url;
+  return map;
 }
 
 // ÖZEL/Plus üyelerin seçebildiği alternatif site teması (null = varsayılan).
@@ -148,8 +177,8 @@ async function listUsersWithBadges() {
 // Bu haftaki (son 7 gün) en çok anı gönderen ve en çok beğeni toplayan
 // kullanıcılar — admin panelinde "Haftanın Aktifi"/"Haftanın Beğenileni"
 // rozetini kime vereceğine karar vermesi için referans listesi.
-async function getWeeklyLeaderboard() {
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+async function getWeeklyLeaderboard(since) {
+  const cutoff = since || Date.now() - 7 * 24 * 60 * 60 * 1000;
 
   // İki sorgu birbirine bağımlı değilmiş gibi PARALEL çalıştırılıyor (tüm
   // beğenileri çekip eşleştirmeyi JS tarafında yapıyoruz) — art arda iki ağ
@@ -199,6 +228,9 @@ module.exports = {
   updatePasswordHash,
   updateBio,
   updateTheme,
+  setAvatar,
+  clearAvatar,
+  getAllAvatars,
   setCustomLimits,
   clearCustomLimits,
   listUsersWithCustomLimits,

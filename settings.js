@@ -54,4 +54,26 @@ async function updateSettings({ dailySubmitLimit, maxImageBytes, maxVideoBytes, 
   return updated;
 }
 
-module.exports = { getSettings, updateSettings, DEFAULTS };
+// Haftalık rozet dağıtımını "sahiplenir": bu hafta için daha önce
+// dağıtılmadıysa true'ya yakın bir önceki değeri döndürür, dağıtıldıysa null.
+async function claimWeeklyAward(T) {
+  const { data: cur, error: e1 } = await supabase.from('app_settings').select('last_weekly_award').eq('id', 1).maybeSingle();
+  if (e1) throw e1;
+  const prev = cur ? Number(cur.last_weekly_award || 0) : 0;
+  if (prev >= T) return null;
+  const { data, error } = await supabase
+    .from('app_settings')
+    .update({ last_weekly_award: T })
+    .eq('id', 1)
+    .lt('last_weekly_award', T)
+    .select();
+  if (error) throw error;
+  return (data || []).length > 0 ? prev : null;
+}
+
+async function restoreWeeklyAward(prev) {
+  const { error } = await supabase.from('app_settings').update({ last_weekly_award: prev }).eq('id', 1);
+  if (error) throw error;
+}
+
+module.exports = { getSettings, updateSettings, claimWeeklyAward, restoreWeeklyAward, DEFAULTS };
