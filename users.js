@@ -10,6 +10,7 @@ function fromRow(row) {
     theme: row.theme || null,
     avatarUrl: row.avatar_url || null,
     avatarPublicId: row.avatar_public_id || null,
+    nameStyle: row.name_style || null,
     badges: Array.isArray(row.badges) ? row.badges : [],
     customImageBytes: row.custom_image_bytes != null ? Number(row.custom_image_bytes) : null,
     customVideoBytes: row.custom_video_bytes != null ? Number(row.custom_video_bytes) : null,
@@ -87,12 +88,127 @@ async function clearAvatar(userId) {
 
 // Galeride gönderen adının yanında küçük profil fotoğrafı göstermek için:
 // sadece fotoğrafı olan kullanıcılar (küçük bir harita: kullanıcı adı -> url).
+// İsim rengi kullanma hakkı veren rozetler
+const NAME_STYLE_BADGES = ['founder', 'croshy', 'special', 'plus', 'weekly_active', 'weekly_liked'];
+function canStyleName(user) {
+  return !!(user && Array.isArray(user.badges) && user.badges.some((b) => NAME_STYLE_BADGES.includes(b)));
+}
+
+// Galeride gönderen adının yanında küçük profil fotoğrafı + renkli isim
+// göstermek için: sadece fotoğrafı/ismi özelleştirilmiş kullanıcılar.
+// (Sütunlar henüz yoksa galeri bozulmasın diye hata yutulur.)
 async function getAllAvatars() {
-  const { data, error } = await supabase.from('app_users').select('username, avatar_url').not('avatar_url', 'is', null);
+  try {
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('username, avatar_url, name_style, badges')
+      .or('avatar_url.not.is.null,name_style.not.is.null');
+    if (error) throw error;
+    const map = {};
+    for (const row of data || []) {
+      const user = { badges: Array.isArray(row.badges) ? row.badges : [] };
+      map[row.username] = {
+        avatarUrl: row.avatar_url || null,
+        nameStyle: canStyleName(user) ? row.name_style || null : null,
+      };
+    }
+    return map;
+  } catch (e) {
+    return {};
+  }
+}
+
+async function setNameStyle(userId, style) {
+  const { error } = await supabase.from('app_users').update({ name_style: style || null }).eq('id', userId);
   if (error) throw error;
-  const map = {};
-  for (const row of data || []) map[row.username] = row.avatar_url;
-  return map;
+}
+
+// ---------- Hesap yönetimi: arama / yeniden adlandırma / silme ----------
+
+async function searchUsers(q) {
+  const term = String(q || '').trim().toLowerCase().replace(/[^a-z0-9ığüşöç_.\- ]/g, '').slice(0, 20);
+  if (!term) return [];
+  const { data, error } = await supabase
+    .from('app_users')
+    .select('id, username, created_at, badges')
+    .ilike('username_lower', '%' + term + '%')
+    .limit(10);
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    id: r.id,
+    username: r.username,
+    createdAt: Number(r.created_at),
+    badges: Array.isArray(r.badges) ? r.badges : [],
+  }));
+}
+
+const NAME_CHANGE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const NAME_CHANGE_LIMIT = 2;
+
+// Kullanıcının kendi yaptığı değişiklikler: 14 günde en fazla 2 (admin değişiklikleri sayılmaz).
+async function getNameChangeInfo(userId) {
+  const fallback = { used: 0, remaining: NAME_CHANGE_LIMIT, nextAt: null };
+  try {
+    const { data, error } = await supabase
+      .from('name_changes')
+      .select('changed_at')
+      .eq('user_id', userId)
+      .eq('by_admin', false)
+      .gt('changed_at', Date.now() - NAME_CHANGE_WINDOW_MS)
+      .order('changed_at', { ascending: false });
+    if (error) throw error;
+    const used = (data || []).length;
+    const remaining = Math.max(0, NAME_CHANGE_LIMIT - used);
+    const nextAt = remaining === 0 ? Number(data[NAME_CHANGE_LIMIT - 1].changed_at) + NAME_CHANGE_WINDOW_MS : null;
+    return { used, remaining, nextAt };
+  } catch (e) {
+    return fallback;
+  }
+}
+
+// Kullanıcı adını değiştirir ve her yerdeki kopyalarını (anılar, ödüller,
+// "beni hatırla" kayıtları) günceller.
+async function renameUser(userId, newName, { byAdmin = false } = {}) {
+  const trimmed = String(newName || '').trim();
+  const current = await findUserById(userId);
+  if (!current) return { ok: false, reason: 'NOT_FOUND' };
+  if (trimmed === current.username) return { ok: false, reason: 'SAME' };
+
+  const existing = await findUserByUsername(trimmed);
+  if (existing && existing.id !== userId) return { ok: false, reason: 'DUPLICATE' };
+
+  const { error } = await supabase
+    .from('app_users')
+    .update({ username: trimmed, username_lower: trimmed.toLowerCase() })
+    .eq('id', userId);
+  if (error) {
+    if (error.code === '23505') return { ok: false, reason: 'DUPLICATE' };
+    throw error;
+  }
+
+  const results = await Promise.all([
+    supabase.from('items').update({ uploader_name: trimmed }).eq('user_id', userId),
+    supabase.from('weekly_awards').update({ username: trimmed }).eq('user_id', userId),
+    supabase.from('remember_tokens').update({ username: trimmed }).eq('subject_type', 'user').eq('subject_id', userId),
+    supabase.from('name_changes').insert({
+      user_id: userId,
+      old_name: current.username,
+      new_name: trimmed,
+      changed_at: Date.now(),
+      by_admin: !!byAdmin,
+    }),
+  ]);
+  results.forEach((r) => {
+    if (r.error) console.error('İsim değişikliği yan güncelleme hatası:', r.error.message);
+  });
+
+  return { ok: true, username: trimmed, oldUsername: current.username };
+}
+
+async function deleteUser(userId) {
+  await supabase.from('name_changes').delete().eq('user_id', userId);
+  const { error } = await supabase.from('app_users').delete().eq('id', userId);
+  if (error) throw error;
 }
 
 // ÖZEL/Plus üyelerin seçebildiği alternatif site teması (null = varsayılan).
@@ -231,6 +347,12 @@ module.exports = {
   setAvatar,
   clearAvatar,
   getAllAvatars,
+  canStyleName,
+  setNameStyle,
+  searchUsers,
+  getNameChangeInfo,
+  renameUser,
+  deleteUser,
   setCustomLimits,
   clearCustomLimits,
   listUsersWithCustomLimits,

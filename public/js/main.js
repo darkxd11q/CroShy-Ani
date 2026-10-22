@@ -64,6 +64,27 @@ function renderMedia(item) {
     : `<img src="${item.url}" alt="${escapeHtml(item.caption || 'anı')}" loading="lazy" />`;
 }
 
+const NAME_PRESETS = {
+  sunrise: 'linear-gradient(90deg,#f97316,#ec4899,#a855f7)',
+  ocean: 'linear-gradient(90deg,#22d3ee,#3b82f6,#8b5cf6)',
+  mint: 'linear-gradient(90deg,#34d399,#a3e635,#fde047)',
+};
+function styledName(name, style) {
+  if (!style) return escapeHtml(name);
+  if (style.type === 'preset' && NAME_PRESETS[style.id]) {
+    return '<span class="name-grad" style="background-image:' + NAME_PRESETS[style.id] + '">' + escapeHtml(name) + '</span>';
+  }
+  if (style.type === 'letters' && Array.isArray(style.colors)) {
+    return [...name]
+      .map((ch, i) => {
+        const c = style.colors[i];
+        return /^#[0-9a-fA-F]{6}$/.test(c || '') ? '<span style="color:' + c + '">' + escapeHtml(ch) + '</span>' : escapeHtml(ch);
+      })
+      .join('');
+  }
+  return escapeHtml(name);
+}
+
 function renderRow(item, index) {
   const side = index % 2 === 0 ? 'left' : 'right';
   const avatarHtml = item.uploaderAvatar
@@ -82,7 +103,7 @@ function renderRow(item, index) {
         </button>
         <div class="overlay">
           <div class="meta">
-            <div class="name card-uploader">${avatarHtml}<a href="/u/${encodeURIComponent(item.uploaderName)}" class="uploader-link" onclick="event.stopPropagation()">${escapeHtml(item.uploaderName)}</a></div>
+            <div class="name card-uploader">${avatarHtml}<a href="/u/${encodeURIComponent(item.uploaderName)}" class="uploader-link" onclick="event.stopPropagation()">${styledName(item.uploaderName, item.uploaderStyle)}</a></div>
             ${item.caption ? `<div class="caption">${escapeHtml(item.caption)}</div>` : ''}
           </div>
         </div>

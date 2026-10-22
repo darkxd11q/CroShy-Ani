@@ -56,17 +56,18 @@ async function checkAward() {
   try {
     const res = await fetch('/api/pending-award');
     if (!res.ok) return;
-    const { awards } = await res.json();
-    if (!awards || awards.length === 0) return;
-    showAwards(awards.slice());
+    const data = await res.clone().json().catch(() => ({}));
+    if (!(data.awards || []).length && !(data.thanks || []).length) return;
+    showAwards((data.awards || []).slice(), (data.thanks || []).slice(), data.username || '');
   } catch {
     // sessizce yut
   }
 }
 
-function showAwards(queue) {
+function showAwards(queue, thanks, username) {
   const a = queue.shift();
   if (!a) {
+    if (thanks && thanks.length) return showThanks(thanks, username);
     fetch('/api/award-seen', { method: 'POST' }).catch(() => {});
     return;
   }
@@ -146,9 +147,96 @@ function showAwards(queue) {
     overlay.style.opacity = '0';
     setTimeout(() => {
       overlay.remove();
-      showAwards(queue);
+      showAwards(queue, thanks, username);
     }, 400);
   };
   next.addEventListener('click', finish);
   go.addEventListener('click', () => fetch('/api/award-seen', { method: 'POST', keepalive: true }).catch(() => {}));
+}
+
+
+// ---------- Geri bildirim teşekkür ekranı ----------
+const THANKS_TEXT = {
+  approved: [
+    'Gönderdiğin geri bildirimi dikkatle okuduk ve değerlendirmeye aldık. CroShy Anı, onu kullanan insanlarla birlikte büyüyen bir yer; senin gibi topluluğun içinden birinin durup bize zaman ayırması, düşüncesini paylaşması gerçekten çok kıymetli.',
+    'Bu tür katkılar sayesinde siteyi her geçen gün biraz daha güzel, daha kullanışlı ve daha keyifli hale getiriyoruz. Bu ortak alanı birlikte şekillendirdiğimiz için sana içtenlikle teşekkür ederiz — iyi ki buradasın!',
+  ],
+  loved: [
+    'Yazdıklarını okurken gerçekten çok sevindik. Geri bildirimin bizim için sıradan bir not değil; sitenin gelişmesine doğrudan dokunan, düşünülmüş ve çok samimi bir katkı.',
+    "CroShy Anı'nı sadece biz yapmıyoruz — senin gibi zaman ayırıp \"şu şöyle olsa daha iyi olur\" diyen insanlar sayesinde her gün biraz daha iyiye gidiyor. Bunu hiçbir zaman hafife almıyoruz; senin gibi birinin burada olması bize büyük bir motivasyon veriyor.",
+    'Küçük bir teşekkür olarak profiline özel Destekçi rozetini ekledik ve günlük paylaşım hakkını 1 artırdık. Bu rozet, sitenin gelişmesine verdiğin emeğin kalıcı bir işareti. Fikirlerini paylaşmaya devam etmeni çok isteriz; seninle birlikte çok daha güzel yerlere varacağımıza gönülden inanıyoruz.',
+  ],
+};
+
+function showThanks(queue, username) {
+  const t = queue.shift();
+  if (!t) {
+    fetch('/api/award-seen', { method: 'POST' }).catch(() => {});
+    return;
+  }
+  const loved = t.type === 'loved';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'award-overlay thanks-overlay' + (loved ? ' thanks-loved' : '');
+
+  const confetti = document.createElement('div');
+  confetti.className = 'confetti';
+  const colors = loved ? ['#10b981', '#fde68a', '#a78bfa', '#ffffff', '#f472b6'] : ['#a78bfa', '#60a5fa', '#ffffff', '#f0abfc', '#5eead4'];
+  for (let i = 0; i < (loved ? 70 : 40); i++) {
+    const s = document.createElement('span');
+    s.style.left = Math.random() * 100 + '%';
+    s.style.background = colors[i % colors.length];
+    s.style.animationDelay = Math.random() * 1.6 + 's';
+    s.style.animationDuration = 2.6 + Math.random() * 2.4 + 's';
+    s.style.transform = 'rotate(' + Math.random() * 360 + 'deg)';
+    confetti.appendChild(s);
+  }
+
+  const card = document.createElement('div');
+  card.className = 'award-card thanks-card';
+  const mk = (tag, cls, txt) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (txt != null) el.textContent = txt;
+    return el;
+  };
+
+  const icon = mk('div', 'award-trophy', loved ? '💜' : '🙏');
+  const kicker = mk('div', 'award-kicker', loved ? 'Sana özel bir teşekkür' : 'Geri bildirimin onaylandı');
+  const title = mk('h2', 'award-title');
+  const shimmer = mk('span', 'reveal-shimmer', 'Teşekkürler' + (username ? ', ' + username : '') + '!');
+  title.appendChild(shimmer);
+
+  const quote = mk('div', 'thanks-quote', '“' + t.excerpt + (t.excerpt.length >= 140 ? '…' : '') + '”');
+
+  const body = mk('div', 'thanks-body');
+  (THANKS_TEXT[loved ? 'loved' : 'approved'] || []).forEach((p) => body.appendChild(mk('p', null, p)));
+
+  card.append(icon, kicker, title, quote, body);
+
+  if (loved) {
+    const perks = mk('div', 'award-reward');
+    perks.innerHTML = '🤝 <strong>Destekçi</strong> rozeti profilinde &nbsp;·&nbsp; 📅 günlük paylaşım hakkın <strong>+1</strong>';
+    card.appendChild(perks);
+  }
+  card.appendChild(mk('div', 'thanks-sign', '— CroShy'));
+
+  const actions = mk('div', 'reveal-actions');
+  actions.style.animationDelay = '1.4s';
+  const ok = mk('button', 'btn primary', queue.length ? 'Sıradaki ➜' : 'Harika!');
+  ok.type = 'button';
+  actions.appendChild(ok);
+  card.appendChild(actions);
+
+  overlay.append(confetti, card);
+  document.body.appendChild(overlay);
+
+  ok.addEventListener('click', () => {
+    overlay.style.transition = 'opacity .4s ease';
+    overlay.style.opacity = '0';
+    setTimeout(() => {
+      overlay.remove();
+      showThanks(queue, username);
+    }, 400);
+  });
 }

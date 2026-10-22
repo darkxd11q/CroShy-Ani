@@ -1,0 +1,30 @@
+<div class="auth-card" data-tab="<%= tab %>">
+  <div class="auth-head">
+    <span class="brand-mark-wrap"><img src="/img/logo-192.png" alt="" /></span>
+    <span class="brand-text">CroShy Anı</span>
+  </div>
+  <div class="auth-tabs">
+    <button type="button" data-tab="login">Giriş Yap</button>
+    <button type="button" data-tab="register">Kayıt Ol</button>
+  </div>
+  <% if (error) { %><div class="auth-error"><%= error %></div><% } %>
+
+  <form method="POST" action="/login" class="auth-form" data-form="login">
+    <input type="hidden" name="next" value="<%= next || '' %>" />
+    <input type="text" name="username" placeholder="Kullanıcı adı" autocomplete="username" required />
+    <input type="password" name="password" placeholder="Şifre" autocomplete="current-password" required />
+    <label class="remember-row"><input type="checkbox" name="remember" value="1" /> <span>Beni hatırla <em>(3 ay)</em></span></label>
+    <button type="submit" class="btn primary">Giriş Yap</button>
+    <p class="auth-switch">Hesabın yok mu? <a href="/register" data-go="register">Kayıt ol</a></p>
+  </form>
+
+  <form method="POST" action="/register" class="auth-form" data-form="register">
+    <input type="hidden" name="next" value="<%= next || '' %>" />
+    <input type="text" name="username" placeholder="Kullanıcı adı (3-10 karakter)" maxlength="10" autocomplete="username" required />
+    <input type="password" name="password" placeholder="Şifre (en az 6 karakter)" minlength="6" autocomplete="new-password" required />
+    <input type="password" name="confirmPassword" placeholder="Şifre (tekrar)" minlength="6" autocomplete="new-password" required />
+    <label class="remember-row"><input type="checkbox" name="remember" value="1" /> <span>Beni hatırla <em>(3 ay)</em></span></label>
+    <button type="submit" class="btn primary">Kayıt Ol</button>
+    <p class="auth-switch">Zaten hesabın var mı? <a href="/login" data-go="login">Giriş yap</a></p>
+  </form>
+</div>

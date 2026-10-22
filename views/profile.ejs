@@ -74,10 +74,13 @@
 
     <div class="upload-card" style="margin: 18px 0 20px;">
       <div class="profile-hero">
-        <div class="profile-avatar <%= badges.includes('special') ? 'avatar-special' : (badges.includes('plus') ? 'avatar-plus' : '') %>"><%= username.charAt(0).toUpperCase() %></div>
+        <div class="avatar-wrap">
+          <div class="profile-avatar <%= badges.includes('special') ? 'avatar-special' : (badges.includes('plus') ? 'avatar-plus' : '') %>" id="profileAvatar"><% if (locals.avatarUrl) { %><img src="<%= avatarUrl %>" alt="" /><% } else { %><%= username.charAt(0).toUpperCase() %><% } %></div>
+          <button type="button" class="avatar-edit-btn" id="avatarEditBtn" data-avatar-open aria-label="Profil fotoğrafını değiştir">📷</button>
+        </div>
         <div class="profile-identity">
           <div class="profile-name-row">
-            <span class="profile-name"><%= username %></span>
+            <span class="profile-name"><%- renderName(username, locals.nameStyle) %></span>
           </div>
           <% if (badges && badges.length > 0) { %>
             <div class="badge-row">
@@ -90,6 +93,7 @@
           <% } %>
           <div class="profile-joined"><% if (createdAt) { %>Katılma: <%= new Date(createdAt).toLocaleDateString('tr-TR') %><% } %></div>
           <div class="profile-actions">
+            <button type="button" class="btn small" data-avatar-open>📷 Fotoğraf Yükle</button>
             <a href="/redeem" class="btn small">🎟️ Kod Kullan</a>
             <a href="/u/<%= encodeURIComponent(username) %>" class="btn ghost small">Herkese Açık Halini Gör ↗</a>
           </div>
@@ -175,26 +179,74 @@
     <div class="upload-card" style="margin-bottom: 20px;">
       <h2 class="profile-section-title">🎨 Temalar</h2>
       <% var THEME_OPTIONS = [
-        { id: '', name: 'Varsayılan', sw: ['#8b5cf6', '#ec4899', '#22d3ee'] },
-        { id: 'ocean', name: 'Okyanus', sw: ['#0ea5e9', '#06b6d4', '#5eead4'] },
-        { id: 'sunset', name: 'Gün Batımı', sw: ['#f97316', '#ec4899', '#fbbf24'] },
-        { id: 'emerald', name: 'Zümrüt', sw: ['#10b981', '#34d399', '#a3e635'] }
-      ]; %>
-      <% if (locals.premium) { %>
-        <p class="profile-section-sub">Sitenin görünümünü sana özel renklerle değiştir.</p>
-        <form method="POST" action="/profile/update-theme">
-          <div class="theme-grid">
-            <% THEME_OPTIONS.forEach(function(t) { %>
-              <button type="submit" name="theme" value="<%= t.id %>" class="theme-option <%= (theme || '') === t.id ? 'active' : '' %>">
-                <div class="theme-swatch"><% t.sw.forEach(function(c) { %><span style="background:<%= c %>"></span><% }) %></div>
-                <div class="theme-name"><%= t.name %></div>
-              </button>
-            <% }) %>
+        { id: '', name: 'Varsayılan', kind: 'free', sw: ['#8b5cf6', '#ec4899', '#22d3ee'] },
+        { id: 'ocean', name: 'Okyanus', kind: 'base', sw: ['#0ea5e9', '#06b6d4', '#5eead4'] },
+        { id: 'sunset', name: 'Gün Batımı', kind: 'base', sw: ['#f97316', '#ec4899', '#fbbf24'] },
+        { id: 'emerald', name: 'Zümrüt', kind: 'base', sw: ['#10b981', '#34d399', '#a3e635'] },
+        { id: 'aurora', name: 'Aurora', kind: 'reward', sw: ['#2dd4bf', '#a78bfa', '#f0abfc'] },
+        { id: 'royal', name: 'Kraliyet', kind: 'reward', sw: ['#eab308', '#dc2626', '#fde047'] }
+      ]; var allowed = locals.allowedThemes || []; %>
+      <p class="profile-section-sub">Sitenin görünümünü sana özel renklerle değiştir. 🏅 Ödül temaları, haftalık rozet kazandıktan sonra 15 gün boyunca açılır.</p>
+      <form method="POST" action="/profile/update-theme">
+        <div class="theme-grid">
+          <% THEME_OPTIONS.forEach(function(t) { var ok = t.kind === 'free' || allowed.includes(t.id); %>
+            <button type="submit" name="theme" value="<%= t.id %>" class="theme-option <%= (theme || '') === t.id ? 'active' : '' %> <%= ok ? '' : 'locked' %>" <%= ok ? '' : 'disabled' %>>
+              <div class="theme-swatch"><% t.sw.forEach(function(c) { %><span style="background:<%= c %>"></span><% }) %></div>
+              <div class="theme-name"><%= t.name %></div>
+              <% if (!ok) { %>
+                <div class="theme-lock"><%= t.kind === 'reward' ? '🏅 Haftalık ödül' : '🔒 ÖZEL / Plus' %></div>
+              <% } else if (t.kind === 'reward' && locals.rewardExpiry) { %>
+                <div class="theme-lock ok">⏳ <%= Math.max(1, Math.ceil((rewardExpiry - Date.now()) / 86400000)) %> gün kaldı</div>
+              <% } %>
+            </button>
+          <% }) %>
+        </div>
+      </form>
+      <% if (!locals.canThemes) { %>
+        <div class="theme-teaser" style="margin-top:14px;">
+          <span>🔒 Temalar <strong>ÖZEL</strong> ve <strong>Plus</strong> üyelere özel.</span>
+          <a href="/redeem" class="btn small">🎟️ Kodum Var</a>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="upload-card" style="margin-bottom: 20px;">
+      <h2 class="profile-section-title">✏️ Kullanıcı Adı</h2>
+      <% var nc = locals.nameChange || { remaining: 2, nextAt: null }; %>
+      <p class="profile-section-sub">
+        14 günde en fazla 2 kez değiştirebilirsin.
+        <% if (nc.remaining > 0) { %>Kalan hakkın: <strong><%= nc.remaining %>/2</strong>
+        <% } else { %>Şu an hakkın yok — <strong><%= new Date(nc.nextAt).toLocaleString('tr-TR') %></strong> tarihinde yenilenir.<% } %>
+      </p>
+      <form method="POST" action="/profile/change-name" style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="text" name="newUsername" minlength="3" maxlength="10" placeholder="Yeni kullanıcı adı" required <%= nc.remaining > 0 ? '' : 'disabled' %>
+               style="flex:1; min-width:160px; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        <button type="submit" class="btn primary small" <%= nc.remaining > 0 ? '' : 'disabled' %>>Değiştir</button>
+      </form>
+    </div>
+
+    <div class="upload-card" style="margin-bottom: 20px;">
+      <h2 class="profile-section-title">🌈 İsim Rengi</h2>
+      <% if (locals.canStyleName) { %>
+        <p class="profile-section-sub">Adını harf harf istediğin renge boyayabilir ya da hazır bir gradyan seçebilirsin.</p>
+        <div id="nameStyleEditor" data-name="<%= username %>" data-style="<%= JSON.stringify(locals.nameStyle || null) %>">
+          <div class="name-preview" id="namePreview"><%- renderName(username, locals.nameStyle) %></div>
+          <div class="name-presets">
+            <button type="button" class="name-preset" data-preset="sunrise" style="background-image:linear-gradient(90deg,#f97316,#ec4899,#a855f7)">Gün Doğumu</button>
+            <button type="button" class="name-preset" data-preset="ocean" style="background-image:linear-gradient(90deg,#22d3ee,#3b82f6,#8b5cf6)">Okyanus</button>
+            <button type="button" class="name-preset" data-preset="mint" style="background-image:linear-gradient(90deg,#34d399,#a3e635,#fde047)">Nane</button>
+            <button type="button" class="name-preset clear" data-preset="none">Düz</button>
           </div>
-        </form>
+          <div class="name-letters-label">Ya da harf harf kendi renklerini seç:</div>
+          <div class="name-letters" id="nameLetters"></div>
+          <div class="name-style-actions">
+            <button type="button" class="btn primary small" id="nameStyleSave">Kaydet</button>
+            <span class="avatar-status" id="nameStyleStatus"></span>
+          </div>
+        </div>
       <% } else { %>
         <div class="theme-teaser">
-          <span>🔒 Ekstra temalar <strong>ÖZEL</strong> ve <strong>Plus</strong> üyelere özel.</span>
+          <span>🔒 İsim rengi <strong>ÖZEL</strong>, <strong>Plus</strong> ve haftalık rozet sahiplerine özel.</span>
           <a href="/redeem" class="btn small">🎟️ Kodum Var</a>
         </div>
       <% } %>
@@ -225,7 +277,32 @@
 
   <footer class="site">CroShy Anı · Bu sayfa ileride daha da geliştirilecek</footer>
 
+  <div class="avatar-modal" id="avatarModal" hidden>
+    <div class="avatar-modal-card">
+      <h3 class="avatar-modal-title">Profil Fotoğrafı</h3>
+      <p class="avatar-modal-sub">Fotoğrafı sürükleyip yakınlaştırarak yuvarlak alanı ayarla. <span id="avatarLimitHint"></span></p>
+      <div class="avatar-stage" id="avatarStage">
+        <img id="avatarStageImg" alt="" draggable="false" />
+        <div class="avatar-mask"></div>
+        <label class="avatar-empty" id="avatarEmpty" for="avatarFile">📁 Fotoğraf seçmek için dokun</label>
+      </div>
+      <label class="avatar-zoom">🔍 <input type="range" id="avatarZoom" min="1" max="3" step="0.01" value="1" disabled /></label>
+      <div class="avatar-status" id="avatarStatus"></div>
+      <div class="avatar-actions">
+        <label class="btn small" for="avatarFile">📁 Fotoğraf Seç</label>
+        <input type="file" id="avatarFile" accept="image/*" hidden />
+        <button type="button" class="btn primary small" id="avatarSave" disabled>Kaydet</button>
+        <button type="button" class="btn ghost small" id="avatarCancel">Vazgeç</button>
+        <button type="button" class="btn danger small" id="avatarRemove" <%= locals.avatarUrl ? '' : 'hidden' %>>Kaldır</button>
+      </div>
+    </div>
+  </div>
+  <script>window.AVATAR_CFG = { canGif: <%= locals.canGif ? 'true' : 'false' %>, maxBytes: 5242880, maxGifBytes: 8388608 };</script>
+  <script src="/js/name-style-editor.js"></script>
+  <script src="/js/avatar-editor.js"></script>
   <script src="/js/social-menu.js"></script>
+  <script src="/js/auth-nav.js"></script>
+  <script src="/js/feedback-widget.js"></script>
   <script src="/js/auto-login-badge.js"></script>
 </body>
 </html>

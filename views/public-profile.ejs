@@ -64,10 +64,10 @@
   <div class="upload-wrap" style="max-width: 780px;">
     <div class="upload-card" style="margin-bottom: 22px;">
       <div class="profile-hero" style="margin-bottom: 0;">
-        <div class="profile-avatar <%= badges.includes('special') ? 'avatar-special' : (badges.includes('plus') ? 'avatar-plus' : '') %>" style="width:76px; height:76px; min-width:76px; font-size:2rem;"><%= profileUsername.charAt(0).toUpperCase() %></div>
+        <div class="profile-avatar <%= badges.includes('special') ? 'avatar-special' : (badges.includes('plus') ? 'avatar-plus' : '') %>" style="width:76px; height:76px; min-width:76px; font-size:2rem;"><% if (locals.avatarUrl) { %><img src="<%= avatarUrl %>" alt="" /><% } else { %><%= profileUsername.charAt(0).toUpperCase() %><% } %></div>
         <div class="profile-identity">
           <div class="profile-name-row">
-            <span class="profile-name" style="font-size:1.7rem;"><%= profileUsername %></span>
+            <span class="profile-name" style="font-size:1.7rem;"><%- renderName(profileUsername, locals.nameStyle) %></span>
           </div>
           <% if (badges && badges.length > 0) { %>
             <div class="badge-row">
@@ -118,6 +118,8 @@
 
   <footer class="site">CroShy Anı · Herkese açık profil</footer>
 
+  <script src="/js/auth-nav.js"></script>
+  <script src="/js/feedback-widget.js"></script>
   <script src="/js/social-menu.js"></script>
   <script src="/js/lightbox.js"></script>
   <script>

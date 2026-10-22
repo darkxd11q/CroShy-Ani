@@ -294,6 +294,48 @@
 
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
+        <h2 style="margin:0;">Geri Bildirimler</h2>
+        <div class="admin-stat"><%= feedbackList.filter(function(f){ return f.status === 'pending'; }).length %> bekleyen · Onaylarsan kullanıcı ilk girişinde teşekkür ekranı görür; "Çok Beğendim" ise daha samimi bir teşekkür + 🤝 Destekçi rozeti (+1 günlük hak) verir</div>
+      </div>
+    </div>
+
+    <div class="pending-list" id="feedback-list">
+      <% if (feedbackList.length === 0) { %>
+        <div class="empty-state">Henüz geri bildirim yok</div>
+      <% } %>
+      <% feedbackList.forEach(function(f) {
+           var labels = { pending: 'Bekliyor', approved: 'Onaylandı', loved: 'Çok beğenildi', dismissed: 'Geçildi' }; %>
+        <div class="pending-item" data-fb-id="<%= f.id %>" style="align-items:flex-start;">
+          <div class="info">
+            <div class="name"><%= f.username %> <span class="code-status <%= f.status === 'pending' ? 'active' : (f.status === 'dismissed' ? 'expired' : 'used') %>"><%= labels[f.status] || f.status %></span></div>
+            <div class="caption" style="white-space:pre-wrap; overflow-wrap:anywhere; color:var(--text);"><%= f.message %></div>
+            <div class="date"><%= new Date(f.createdAt).toLocaleString('tr-TR') %></div>
+          </div>
+          <div class="actions" style="flex-wrap:wrap;">
+            <% if (f.status !== 'dismissed') { %>
+              <% if (f.status === 'pending') { %><button class="btn approve small" data-fb-action="approve" data-id="<%= f.id %>">✓ Onayla</button><% } %>
+              <% if (f.status !== 'loved') { %><button class="btn small" data-fb-action="love" data-id="<%= f.id %>">💜 Çok Beğendim</button><% } %>
+              <% if (f.status === 'pending') { %><button class="btn danger small" data-fb-action="dismiss" data-id="<%= f.id %>">Geç</button><% } %>
+            <% } %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
+        <h2 style="margin:0;">Hesap Yönetimi</h2>
+        <div class="admin-stat">Kullanıcı adı ara — adını değiştir ya da hesabı sil</div>
+      </div>
+    </div>
+    <div class="upload-card" style="margin-bottom: 20px;">
+      <input type="text" id="userSearch" placeholder="Kullanıcı adı ara…" maxlength="20" autocomplete="off"
+             style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+      <div class="pending-list" id="user-results" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
         <h2 style="margin:0;">Rozet Kodları</h2>
         <div class="admin-stat">Tek kullanımlık, 1 gün geçerli kodlarla 💜 ÖZEL ya da 💠 Plus rolü ver</div>
       </div>
@@ -391,7 +433,7 @@
     <div class="admin-topbar" style="margin-top: 40px;">
       <div>
         <h2 style="margin:0;">Bu Haftanın Öne Çıkanları</h2>
-        <div class="admin-stat">Son 7 gün — "Haftanın Aktifi" / "Haftanın Beğenileni" rozetini kime vereceğine karar vermek için</div>
+        <div class="admin-stat">Son dağıtımdan bu yana — Haftalık rozetler her Cuma 17:15'te otomatik verilir (istersen elle de verebilirsin)</div>
       </div>
     </div>
     <div class="leaderboard-grid" style="margin-bottom: 20px;">

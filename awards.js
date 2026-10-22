@@ -50,15 +50,25 @@ async function markSeenForUser(userId) {
 // (yoksa 0). Ödülden sonra 15 gün boyunca geçerlidir.
 async function getRewardExpiry(userId) {
   if (!userId) return 0;
-  const { data, error } = await supabase
-    .from('weekly_awards')
-    .select('theme_expires_at')
-    .eq('user_id', userId)
-    .gt('theme_expires_at', Date.now())
-    .order('theme_expires_at', { ascending: false })
-    .limit(1);
+  try {
+    const { data, error } = await supabase
+      .from('weekly_awards')
+      .select('theme_expires_at')
+      .eq('user_id', userId)
+      .gt('theme_expires_at', Date.now())
+      .order('theme_expires_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    return data && data.length ? Number(data[0].theme_expires_at) : 0;
+  } catch (e) {
+    // Tablo henüz yoksa (şema güncellenmemişse) profil sayfası bozulmasın
+    return 0;
+  }
+}
+
+async function deleteForUser(userId) {
+  const { error } = await supabase.from('weekly_awards').delete().eq('user_id', userId);
   if (error) throw error;
-  return data && data.length ? Number(data[0].theme_expires_at) : 0;
 }
 
 // [from, to) aralığında onaylı anıları üzerinden haftanın kazananlarını hesaplar.
@@ -103,4 +113,4 @@ async function computeWinners(from, to) {
   return { topSubmitter, topLiked };
 }
 
-module.exports = { record, getUnseenForUser, markSeenForUser, getRewardExpiry, computeWinners };
+module.exports = { record, getUnseenForUser, markSeenForUser, getRewardExpiry, computeWinners, deleteForUser };

@@ -35,6 +35,8 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
 - Herkes kendine özel **profil fotoğrafı** ekleyebilir (yuvarlak alan sürükle-yakınlaştır ile ayarlanır, yüklenmeden önce kalite bozulmadan sıkıştırılır); ÖZEL ve Plus üyeler **GIF** profil fotoğrafı da kullanabilir
 - Ana sayfadan tek tıkla giriş yapma / kayıt olma, "beni hatırla" ile 3 aya kadar otomatik giriş
 - **Haftanın Aktifi** ve **Haftanın Beğenileni** rozetleri her Cuma 17:15'te otomatik verilir; kazananı havalı bir kutlama ekranı karşılar ve 15 gün boyunca 2 ekstra tema kazanır
+- Sağ alttaki **geri bildirim** düğmesiyle fikir ve önerilerini ekibe iletebilirsin; katkın değerlendirilirse sana özel bir teşekkür ekranı karşılar
+- Kullanıcı adını 14 günde 2 kez değiştirebilirsin; ÖZEL, Plus ve haftalık rozet sahipleri adlarını harf harf ya da hazır gradyanlarla renklendirebilir
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**

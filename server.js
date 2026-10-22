@@ -16,6 +16,7 @@ const viewsStore = require('./views_store');
 const rememberTokens = require('./rememberTokens');
 const redeemCodes = require('./redeemCodes');
 const awards = require('./awards');
+const feedback = require('./feedback');
 const settings = require('./settings');
 const {
   safeStringEqual,
@@ -53,9 +54,10 @@ const BADGE_INFO = {
   plus: { label: 'Plus', icon: '💠', className: 'badge-plus' },
   weekly_active: { label: 'Haftanın Aktifi', icon: '🔥', className: 'badge-weekly-active' },
   weekly_liked: { label: 'Haftanın Beğenileni', icon: '⭐', className: 'badge-weekly-liked' },
+  supporter: { label: 'Destekçi', icon: '🤝', className: 'badge-supporter' },
   member: { label: 'Üye', icon: '👤', className: 'badge-member' },
 };
-const BADGE_ORDER = ['founder', 'croshy', 'special', 'plus', 'weekly_active', 'weekly_liked', 'member'];
+const BADGE_ORDER = ['founder', 'croshy', 'special', 'plus', 'weekly_active', 'weekly_liked', 'supporter', 'member'];
 
 // Kod ile edinilebilen premium roller (bkz. redeem_codes tablosu).
 const REDEEMABLE_BADGES = ['special', 'plus'];
@@ -70,6 +72,53 @@ const PREMIUM_THEMES = ['ocean', 'sunset', 'emerald'];
 const BASE_THEMES = PREMIUM_THEMES;
 const REWARD_THEMES = ['aurora', 'royal'];
 const REWARD_THEME_MS = 15 * 24 * 60 * 60 * 1000;
+
+// <NAME-STYLE-BEGIN>
+// İsim rengi: ÖZEL/Plus/haftalık rozet sahipleri (ve Site Kurucusu/CroShy)
+// adlarını hazır gradyanlarla ya da harf harf kendi seçtikleri renklerle boyayabilir.
+const NAME_PRESETS = {
+  sunrise: 'linear-gradient(90deg,#f97316,#ec4899,#a855f7)',
+  ocean: 'linear-gradient(90deg,#22d3ee,#3b82f6,#8b5cf6)',
+  mint: 'linear-gradient(90deg,#34d399,#a3e635,#fde047)',
+};
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Kullanıcıdan gelen stili doğrular/normalize eder. null = stil yok, undefined = geçersiz.
+function sanitizeNameStyle(input, username) {
+  if (!input || input.type === 'none') return null;
+  if (input.type === 'preset' && NAME_PRESETS[input.id]) return { type: 'preset', id: input.id };
+  if (input.type === 'letters' && Array.isArray(input.colors)) {
+    const n = [...String(username)].length;
+    const colors = input.colors.slice(0, n).map((c) => (typeof c === 'string' && HEX_COLOR.test(c) ? c.toLowerCase() : null));
+    while (colors.length < n) colors.push(null);
+    return { type: 'letters', colors };
+  }
+  return undefined;
+}
+
+function renderNameHtml(name, style) {
+  const safeName = escHtml(name);
+  if (!style) return safeName;
+  if (style.type === 'preset' && NAME_PRESETS[style.id]) {
+    return '<span class="name-grad" style="background-image:' + NAME_PRESETS[style.id] + '">' + safeName + '</span>';
+  }
+  if (style.type === 'letters' && Array.isArray(style.colors)) {
+    return [...String(name)]
+      .map((ch, i) => {
+        const c = style.colors[i];
+        return typeof c === 'string' && HEX_COLOR.test(c) ? '<span style="color:' + c + '">' + escHtml(ch) + '</span>' : escHtml(ch);
+      })
+      .join('');
+  }
+  return safeName;
+}
+app.locals.renderName = renderNameHtml;
+const canStyleName = users.canStyleName;
+// <NAME-STYLE-END>
 
 function hasPremium(user) {
   return !!(user && Array.isArray(user.badges) && user.badges.some((b) => PREMIUM_BADGES.includes(b)));
@@ -104,6 +153,23 @@ app.use(
     },
   })
 );
+
+// Admin bir hesabı sildiyse açık oturumları kapat; yeniden adlandırdıysa
+// oturumdaki ismi güncelle (oturumlar bellekte tutulduğu için bu yeterli).
+const deletedUserIds = new Set();
+const renamedUsers = new Map();
+app.use((req, res, next) => {
+  const uid = req.session && req.session.userId;
+  if (uid && deletedUserIds.has(uid)) {
+    return req.session.destroy(() => {
+      res.clearCookie('croshy.sid');
+      res.clearCookie('croshy_remember', { path: '/' });
+      next();
+    });
+  }
+  if (uid && renamedUsers.has(uid)) req.session.username = renamedUsers.get(uid);
+  next();
+});
 
 // ---------- "Beni hatırla" / otomatik giriş ----------
 // Oturum çerezi (üstteki) kasıtlı olarak kısa ömürlü (8 saat) — güvenlik
@@ -301,6 +367,15 @@ const registerLimiter = createRateLimiter({
 // Async route handler'larda try/catch tekrarını önlemek için küçük bir sarmalayıcı.
 // Bir Supabase isteği patlarsa 500 + JSON hata döner (HTML hata sayfası değil,
 // aksi halde fetch() tarafında yine "Unexpected token '<'" hatasına düşülür).
+// Tablo/sütun yoksa (supabase-schema.sql güncellenmemişse) bunu yönetici anlasın.
+function friendlyServerError(err) {
+  const code = err && err.code;
+  if (['42703', '42P01', 'PGRST204', 'PGRST205'].includes(code)) {
+    return 'Veritabanı şeması güncel değil. Site yöneticisi supabase-schema.sql dosyasını çalıştırmalı.';
+  }
+  return 'Sunucuda beklenmeyen bir hata oluştu.';
+}
+
 function asyncRoute(handler) {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch((err) => {
@@ -308,7 +383,7 @@ function asyncRoute(handler) {
       if (res.headersSent) return next(err);
       const wantsJson = req.path.startsWith('/api/');
       if (wantsJson) {
-        res.status(500).json({ error: 'Sunucuda beklenmeyen bir hata oluştu.' });
+        res.status(500).json({ error: friendlyServerError(err) });
       } else {
         res.status(500).send('Sunucuda beklenmeyen bir hata oluştu.');
       }
@@ -337,7 +412,7 @@ function hasFullExemption(user) {
 // Bir kullanıcı için geçerli olan (kişiye özelse onu, yoksa genel ayarı
 // kullanan) fiili sınırları hesaplar. Muaf tutan bir rozeti varsa tüm
 // sınırlar kaldırılır.
-function effectiveLimitsFor(user, globalSettings) {
+function effectiveLimitsBase(user, globalSettings) {
   if (hasFullExemption(user)) {
     return {
       imageBytes: NO_LIMIT,
@@ -369,6 +444,16 @@ function effectiveLimitsFor(user, globalSettings) {
   }
 
   return { ...base, unlimited: false, premium: false };
+}
+
+// Destekçi rozeti (geri bildirimi çok beğenilenlere verilir): günlük paylaşım
+// hakkına +1 ekler (örn. normalde 3 ise 4).
+function effectiveLimitsFor(user, globalSettings) {
+  const l = effectiveLimitsBase(user, globalSettings);
+  if (!l.unlimited && user && Array.isArray(user.badges) && user.badges.includes('supporter')) {
+    return { ...l, dailyLimit: l.dailyLimit + 1, supporter: true };
+  }
+  return l;
 }
 
 // ---------- Yumuşak silinen öğelerin kalıcı temizliği ----------
@@ -561,7 +646,8 @@ app.get(
       ...rest,
       likes: likeCounts[rest.id] || 0,
       likedByMe: likedByMe.has(rest.id),
-      uploaderAvatar: avatarMap[rest.uploaderName] || null,
+      uploaderAvatar: (avatarMap[rest.uploaderName] || {}).avatarUrl || null,
+      uploaderStyle: (avatarMap[rest.uploaderName] || {}).nameStyle || null,
     }));
 
     if (sort === 'oldest') {
@@ -620,7 +706,7 @@ app.get(
       unlimited: limits.unlimited,
       premium: limits.premium,
       premiumRole: user && user.badges.includes('special') ? 'special' : user && user.badges.includes('plus') ? 'plus' : null,
-      username: req.session.username,
+      username: (user && user.username) || req.session.username,
       dailyLimit: limits.dailyLimit,
       usedToday: used,
       remainingToday: Math.max(0, limits.dailyLimit - used),
@@ -653,6 +739,9 @@ app.post(
       return res.status(403).json({ error: 'Bu IP adresinin anı gönderme yetkisi kaldırılmış.' });
     }
 
+    if (!uploader) {
+      return res.status(401).json({ error: 'Hesap bulunamadı. Lütfen tekrar giriş yap.', loginRequired: true });
+    }
     const limits = effectiveLimitsFor(uploader, globalSettings);
 
     if (usedToday >= limits.dailyLimit) {
@@ -745,7 +834,7 @@ app.post(
       type,
       // İsim her zaman oturum açmış kullanıcıdan alınır, client'tan gelen
       // herhangi bir isim asla güvenilmez / kullanılmaz.
-      uploaderName: req.session.username,
+      uploaderName: (uploader && uploader.username) || req.session.username,
       userId: req.session.userId,
       ip,
       caption: cleanCaption.slice(0, 200),
@@ -1007,6 +1096,7 @@ app.get(
       likeCounts,
       deletedItems,
       redeemCodeList,
+      feedbackList,
     ] = await Promise.all([
       db.getPendingItems(),
       db.getApprovedCount(),
@@ -1019,6 +1109,7 @@ app.get(
       isSuperAdmin ? likes.getAllCounts() : Promise.resolve({}),
       isSuperAdmin ? db.getDeletedItems() : Promise.resolve([]),
       isSuperAdmin ? redeemCodes.listRecent(25) : Promise.resolve([]),
+      isSuperAdmin ? feedback.listForAdmin(60).catch(() => []) : Promise.resolve([]),
     ]);
 
     const approvedItems = approvedRaw
@@ -1031,6 +1122,7 @@ app.get(
       approvedItems,
       deletedItems,
       redeemCodeList,
+      feedbackList,
       deleteRetentionMs: DELETE_RETENTION_MS,
       username: req.session.username || 'admin',
       adminRole: req.session.adminRole || 'superadmin',
@@ -1296,7 +1388,7 @@ async function buildOwnProfileData(userId, username) {
   const totalLikes = approvedItems.reduce((sum, i) => sum + (likeCounts[i.id] || 0), 0);
   const limits = effectiveLimitsFor(user, globalSettings);
 
-  const rewardExpiry = await awards.getRewardExpiry(userId);
+  const [rewardExpiry, nameChange] = await Promise.all([awards.getRewardExpiry(userId), users.getNameChangeInfo(userId)]);
   const allowedThemes = allowedThemesFor(user, rewardExpiry);
 
   const items = myItems.map((i) => ({ ...i, likes: likeCounts[i.id] || 0 }));
@@ -1321,6 +1413,9 @@ async function buildOwnProfileData(userId, username) {
     rewardExpiry,
     avatarUrl: user ? user.avatarUrl : null,
     canGif: canUseGifAvatar(user),
+    nameChange,
+    nameStyle: user ? user.nameStyle : null,
+    canStyleName: canStyleName(user),
     hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
     error: null,
     success: null,
@@ -1408,6 +1503,7 @@ app.get(
     res.render('public-profile', {
       profileUsername: user.username,
       avatarUrl: user.avatarUrl,
+      nameStyle: canStyleName(user) ? user.nameStyle : null,
       bio: user.bio,
       badges: user.badges,
       BADGE_INFO,
@@ -1590,19 +1686,25 @@ app.post(
   })
 );
 
-// ---------- Haftalık ödül kutlama ekranı ----------
-// Siteye giriş yapmış kullanıcı için henüz görmediği ödül varsa döndürür.
+// ---------- Kutlama / teşekkür ekranları (haftalık ödül + onaylanan geri bildirim) ----------
+// Giriş yapmış kullanıcı için henüz görmediği ödül/teşekkür varsa döndürür.
 // (Boşsa 5 dakikada bir kontrol edilir; gereksiz veritabanı sorgusu olmasın.)
 app.get(
   '/api/pending-award',
   asyncRoute(async (req, res) => {
-    if (!req.session || !req.session.userId) return res.json({ awards: [] });
-    if (Date.now() - (req.session.awardCheckedAt || 0) < 5 * 60 * 1000) return res.json({ awards: [] });
+    if (!req.session || !req.session.userId) return res.json({ awards: [], thanks: [] });
+    if (Date.now() - (req.session.awardCheckedAt || 0) < 5 * 60 * 1000) return res.json({ awards: [], thanks: [] });
 
-    const list = await awards.getUnseenForUser(req.session.userId);
-    if (list.length === 0) req.session.awardCheckedAt = Date.now();
+    const uid = req.session.userId;
+    const [list, thanksList, user] = await Promise.all([
+      awards.getUnseenForUser(uid).catch(() => []),
+      feedback.getUnseenThanks(uid).catch(() => []),
+      users.findUserById(uid),
+    ]);
+    if (list.length === 0 && thanksList.length === 0) req.session.awardCheckedAt = Date.now();
 
     res.json({
+      username: user ? user.username : req.session.username,
       awards: list.map((a) => ({
         id: a.id,
         badge: a.badge,
@@ -1613,6 +1715,7 @@ app.get(
         weekEnd: a.weekEnd,
         themeExpiresAt: a.themeExpiresAt,
       })),
+      thanks: thanksList.map((t) => ({ id: t.id, type: t.status, excerpt: t.message.slice(0, 140) })),
     });
   })
 );
@@ -1621,11 +1724,193 @@ app.post(
   '/api/award-seen',
   requireUserApi,
   asyncRoute(async (req, res) => {
-    await awards.markSeenForUser(req.session.userId);
+    await Promise.all([
+      awards.markSeenForUser(req.session.userId).catch(() => {}),
+      feedback.markThanksSeen(req.session.userId).catch(() => {}),
+    ]);
     req.session.awardCheckedAt = Date.now();
     res.json({ ok: true });
   })
 );
+
+// ---------- Geri bildirim ----------
+const feedbackLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: 'Çok fazla geri bildirim gönderdin. Lütfen daha sonra tekrar dene.',
+});
+
+app.post(
+  '/api/feedback',
+  requireUserApi,
+  feedbackLimiter,
+  asyncRoute(async (req, res) => {
+    const message = String(req.body.message || '').trim();
+    if (message.length < 5) return res.status(400).json({ error: 'Geri bildirim en az 5 karakter olmalı.' });
+    if (message.length > 600) return res.status(400).json({ error: 'Geri bildirim en fazla 600 karakter olabilir.' });
+
+    const user = await users.findUserById(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Hesap bulunamadı.', loginRequired: true });
+
+    const recent = await feedback.countRecent(user.id, Date.now() - 24 * 60 * 60 * 1000);
+    if (recent >= 5) return res.status(429).json({ error: 'Bugün en fazla 5 geri bildirim gönderebilirsin.' });
+
+    await feedback.create({ userId: user.id, username: user.username, message });
+    res.json({ ok: true });
+  })
+);
+
+// Süper admin: geri bildirimi onayla / çok beğen / geç
+app.post(
+  '/api/admin/feedback/:id/:action',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    const id = Number(req.params.id);
+    const action = req.params.action;
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Geçersiz kayıt.' });
+    const fb = await feedback.getById(id);
+    if (!fb) return res.status(404).json({ error: 'Bulunamadı.' });
+
+    if (action === 'approve') {
+      // "Çok beğenildi" olmuş bir bildirimi daha düşük bir duruma çevirme
+      if (fb.status !== 'loved') await feedback.setStatus(id, 'approved');
+    } else if (action === 'love') {
+      await feedback.setStatus(id, 'loved');
+      const u = await users.findUserById(fb.userId);
+      if (u) await users.grantBadge(u.username, 'supporter'); // Destekçi rozeti (+1 günlük hak)
+    } else if (action === 'dismiss') {
+      await feedback.setStatus(id, 'dismissed');
+    } else {
+      return res.status(400).json({ error: 'Geçersiz işlem.' });
+    }
+    res.json({ ok: true });
+  })
+);
+
+// ---------- Kullanıcı adı doğrulama / değiştirme ----------
+function validateNewUsername(name) {
+  const n = String(name || '').trim();
+  if (n.length < 3 || n.length > 10) return 'Kullanıcı adı 3-10 karakter arasında olmalı.';
+  if (!/^[a-zA-Z0-9ığüşöçİĞÜŞÖÇ_.\- ]+$/.test(n)) return 'Kullanıcı adında geçersiz karakterler var.';
+  return null;
+}
+
+app.post(
+  '/profile/change-name',
+  requireUserPage,
+  asyncRoute(async (req, res) => {
+    const renderWith = async (extra) => {
+      const data = await buildOwnProfileData(req.session.userId, req.session.username);
+      return res.render('profile', { ...data, ...extra });
+    };
+    const newName = String(req.body.newUsername || '').trim();
+    const err = validateNewUsername(newName);
+    if (err) return renderWith({ error: err });
+
+    const info = await users.getNameChangeInfo(req.session.userId);
+    if (info.remaining <= 0) {
+      return renderWith({ error: 'Kullanıcı adı değiştirme hakkın doldu (14 günde en fazla 2 kez).' });
+    }
+
+    const r = await users.renameUser(req.session.userId, newName, { byAdmin: false });
+    if (!r.ok) {
+      if (r.reason === 'DUPLICATE') return renderWith({ error: 'Bu kullanıcı adı zaten alınmış.' });
+      if (r.reason === 'SAME') return renderWith({ error: 'Bu zaten şu anki kullanıcı adın.' });
+      return renderWith({ error: 'Kullanıcı adı değiştirilemedi.' });
+    }
+
+    req.session.username = r.username;
+    renamedUsers.set(req.session.userId, r.username);
+    return renderWith({ success: 'Kullanıcı adın güncellendi.' });
+  })
+);
+
+// ---------- İsim rengi ----------
+app.post(
+  '/api/profile/name-style',
+  requireUserApi,
+  asyncRoute(async (req, res) => {
+    const user = await users.findUserById(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Hesap bulunamadı.', loginRequired: true });
+    if (!canStyleName(user)) {
+      return res.status(403).json({ error: 'İsim rengi ÖZEL, Plus ve haftalık rozet sahiplerine açık.' });
+    }
+    const style = sanitizeNameStyle(req.body, user.username);
+    if (style === undefined) return res.status(400).json({ error: 'Geçersiz renk seçimi.' });
+    await users.setNameStyle(user.id, style);
+    res.json({ ok: true, style });
+  })
+);
+
+// ---------- Admin: hesap arama / yeniden adlandırma / silme (süper admin) ----------
+app.get(
+  '/api/admin/users/search',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    res.json({ users: await users.searchUsers(req.query.q) });
+  })
+);
+
+app.post(
+  '/api/admin/users/rename',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    const { username, newUsername } = req.body;
+    const target = await users.findUserByUsername(username);
+    if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+    const err = validateNewUsername(newUsername);
+    if (err) return res.status(400).json({ error: err });
+
+    const r = await users.renameUser(target.id, newUsername, { byAdmin: true });
+    if (!r.ok) {
+      if (r.reason === 'DUPLICATE') return res.status(409).json({ error: 'Bu kullanıcı adı zaten alınmış.' });
+      if (r.reason === 'SAME') return res.status(400).json({ error: 'Yeni ad mevcut adla aynı.' });
+      return res.status(400).json({ error: 'Kullanıcı adı değiştirilemedi.' });
+    }
+    renamedUsers.set(target.id, r.username);
+    res.json({ ok: true, username: r.username });
+  })
+);
+
+app.post(
+  '/api/admin/users/delete',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    const { username, confirm } = req.body;
+    const target = await users.findUserByUsername(username);
+    if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+    // Yanlışlıkla silmeyi önlemek için kullanıcı adı yazılarak onaylanır
+    if (String(confirm || '').trim().toLowerCase() !== target.username.toLowerCase()) {
+      return res.status(400).json({ error: 'Onay için kullanıcı adını doğru yazmalısın.' });
+    }
+
+    // Anıları yumuşak silinir (24 saat içinde "Son Silinenler"den görülebilir,
+    // sonra kalıcı olarak temizlenir); fotoğraf, oturumlar ve ilişkili kayıtlar silinir.
+    const items = await db.getItemsByUserId(target.id);
+    for (const it of items) await db.softDeleteItem(it.id);
+    if (target.avatarPublicId) {
+      try {
+        await cloudinary.uploader.destroy(target.avatarPublicId, { resource_type: 'image' });
+      } catch (e) {
+        console.error('Avatar silinemedi:', e.message);
+      }
+    }
+    await rememberTokens.removeAllForSubject('user', target.id).catch(() => {});
+    await awards.deleteForUser(target.id).catch(() => {});
+    await feedback.deleteForUser(target.id).catch(() => {});
+    await users.deleteUser(target.id);
+    deletedUserIds.add(target.id);
+
+    res.json({ ok: true, username: target.username, removedItems: items.length });
+  })
+);
+
+// Giriş/kayıt kartının HTML parçası — ana sayfadaki pencere de, /login ve
+// /register sayfaları da AYNI kartı kullanır (tek tasarım).
+app.get('/auth-card', (req, res) => {
+  const tab = req.query.tab === 'register' ? 'register' : 'login';
+  res.render('partials/auth-card', { tab, error: null, next: safeNext(req.query.next) || '' });
+});
 
 // 404 - her zaman en sonda
 app.use((req, res) => {

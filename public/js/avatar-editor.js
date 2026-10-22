@@ -70,7 +70,7 @@
     setStatus('');
   }
 
-  openBtn.addEventListener('click', openModal);
+  document.querySelectorAll('[data-avatar-open]').forEach((b) => b.addEventListener('click', openModal));
   document.getElementById('profileAvatar').addEventListener('click', openModal);
   cancelBtn.addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => {

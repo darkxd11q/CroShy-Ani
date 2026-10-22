@@ -130,7 +130,16 @@
     </script>
   <% } %>
 
+  <script>
+    // Kod yerine "admin" yazılırsa admin GİRİŞ sayfasına yönlendir.
+    document.querySelector('form[action="/redeem"]').addEventListener('submit', function (e) {
+      var v = document.getElementById('codeInput').value.trim().toLowerCase();
+      if (v === 'admin') { e.preventDefault(); window.location.href = '/admin/login'; }
+    });
+  </script>
   <script src="/js/social-menu.js"></script>
+  <script src="/js/auth-nav.js"></script>
+  <script src="/js/feedback-widget.js"></script>
   <script src="/js/auto-login-badge.js"></script>
 </body>
 </html>

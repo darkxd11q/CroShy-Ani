@@ -399,3 +399,111 @@ async function handleUnban(ip, btn) {
     setTimeout(() => (copyBtn.textContent = '📋 Kopyala'), 2000);
   });
 })();
+
+
+// ---------- Geri bildirimler ----------
+document.querySelectorAll('[data-fb-action]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const action = btn.dataset.fbAction;
+    if (action === 'love' && !confirm('Bu geri bildirimi çok beğendin mi? Kullanıcıya özel bir teşekkür gidecek ve 🤝 Destekçi rozeti (+1 günlük hak) verilecek.')) return;
+    btn.disabled = true;
+    try {
+      await adminFetch('/api/admin/feedback/' + btn.dataset.id + '/' + action, { method: 'POST' });
+      window.location.reload();
+    } catch (err) {
+      alert('Hata: ' + err.message);
+      btn.disabled = false;
+    }
+  });
+});
+
+// ---------- Hesap yönetimi (ara / adını değiştir / sil) ----------
+(function () {
+  const input = document.getElementById('userSearch');
+  const box = document.getElementById('user-results');
+  if (!input || !box) return;
+
+  let timer = null;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(search, 300);
+  });
+
+  async function search() {
+    const q = input.value.trim();
+    box.textContent = '';
+    if (!q) return;
+    try {
+      const data = await adminFetch('/api/admin/users/search?q=' + encodeURIComponent(q));
+      if (!data.users.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'Eşleşen hesap yok';
+        box.appendChild(empty);
+        return;
+      }
+      data.users.forEach((u) => box.appendChild(row(u)));
+    } catch (err) {
+      box.textContent = 'Hata: ' + err.message;
+    }
+  }
+
+  function row(u) {
+    const el = document.createElement('div');
+    el.className = 'pending-item';
+    el.style.alignItems = 'center';
+
+    const info = document.createElement('div');
+    info.className = 'info';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = u.username;
+    const date = document.createElement('div');
+    date.className = 'date';
+    date.textContent = 'Katıldı: ' + new Date(u.createdAt).toLocaleDateString('tr-TR') + (u.badges.length ? ' · ' + u.badges.join(', ') : '');
+    info.append(name, date);
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const rename = document.createElement('button');
+    rename.className = 'btn small';
+    rename.textContent = '✏️ Adı Değiştir';
+    rename.addEventListener('click', async () => {
+      const nn = prompt('"' + u.username + '" için yeni kullanıcı adı (3-10 karakter):', u.username);
+      if (!nn || nn.trim() === u.username) return;
+      try {
+        await adminFetch('/api/admin/users/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u.username, newUsername: nn.trim() }),
+        });
+        alert('Kullanıcı adı güncellendi.');
+        search();
+      } catch (err) {
+        alert('Hata: ' + err.message);
+      }
+    });
+    const del = document.createElement('button');
+    del.className = 'btn danger small';
+    del.textContent = '🗑️ Hesabı Sil';
+    del.addEventListener('click', async () => {
+      const typed = prompt('Bu hesap ve tüm anıları silinecek. Onaylamak için kullanıcı adını yaz: ' + u.username);
+      if (typed === null) return;
+      try {
+        const r = await adminFetch('/api/admin/users/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u.username, confirm: typed }),
+        });
+        alert('Hesap silindi (' + r.removedItems + ' anı kaldırıldı).');
+        search();
+      } catch (err) {
+        alert('Hata: ' + err.message);
+      }
+    });
+    actions.append(rename, del);
+
+    el.append(info, actions);
+    return el;
+  }
+})();
