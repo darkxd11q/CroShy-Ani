@@ -180,8 +180,7 @@
     saveBtn.disabled = true;
     setStatus('Hazırlanıyor…');
     try {
-      const conf = await fetch('/api/config').then((r) => r.json());
-      if (!conf.cloudName || !conf.uploadPreset) throw new Error('Depolama servisi yapılandırılmamış.');
+      const target = await cloudUploadTarget('avatar', 'image');
 
       const fd = new FormData();
       if (isGif) {
@@ -191,10 +190,10 @@
         if (!blob) throw new Error('Görsel işlenemedi.');
         fd.append('file', blob, 'avatar.jpg');
       }
-      fd.append('upload_preset', conf.uploadPreset);
+      Object.entries(target.fields).forEach(([k, v]) => fd.append(k, v));
 
       setStatus('Yükleniyor…');
-      const up = await fetch('https://api.cloudinary.com/v1_1/' + conf.cloudName + '/image/upload', { method: 'POST', body: fd }).then((r) => r.json());
+      const up = await fetch(target.url, { method: 'POST', body: fd }).then((r) => r.json());
       if (!up.secure_url) throw new Error((up.error && up.error.message) || 'Yükleme başarısız oldu.');
 
       let finalUrl = up.secure_url;

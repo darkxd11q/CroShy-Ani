@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body class="no-scroll">
+  <a class="skip-link" href="#galeri">İçeriğe geç</a>
 
   <div id="intro">
     <div class="intro-inner">
@@ -75,6 +76,7 @@
     <div class="actions">
       <a href="/upload" class="btn primary">Bir Anı Paylaş</a>
       <a href="#galeri" class="btn ghost">Anıları Gör ↓</a>
+      <a href="/random" class="btn ghost">🎲 Rastgele Anı</a>
     </div>
   </section>
 
@@ -82,7 +84,8 @@
     <div class="gallery-head">
       <div>
         <h2>Onaylanmış Anılar</h2>
-        <p id="gallery-count">Yükleniyor…</p>
+        <p id="gallery-count" aria-live="polite">Yükleniyor…</p>
+        <div class="tag-filter" id="tagFilter" hidden></div>
       </div>
       <div class="sort-controls" id="sortControls">
         <button type="button" class="sort-btn active" data-sort="algorithm">Önerilen</button>
@@ -94,9 +97,13 @@
     <div class="memory-timeline" id="memory-timeline">
       <div class="empty-state">Anılar yükleniyor…</div>
     </div>
+    <div class="load-more">
+      <button type="button" class="btn ghost" id="loadMoreBtn" hidden>Daha fazla göster</button>
+      <div class="load-sentinel" id="loadSentinel" aria-hidden="true"></div>
+    </div>
   </section>
 
-  <footer class="site">CroShy Anı · Sevgiyle biriktirildi</footer>
+  <footer class="site">CroShy Anı · Sevgiyle biriktirildi<span class="footer-links"> · <a href="/gizlilik">Gizlilik</a> · <a href="/kosullar">Şartlar</a> · <a href="/cerezler">Çerezler</a></span></footer>
 
   <script src="/js/social-menu.js"></script>
   <script src="/js/auth-nav.js"></script>
@@ -104,5 +111,6 @@
   <script src="/js/auto-login-badge.js"></script>
   <script src="/js/lightbox.js"></script>
   <script src="/js/main.js"></script>
+  <script src="/js/cookie-banner.js"></script>
 </body>
 </html>

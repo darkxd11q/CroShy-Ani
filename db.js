@@ -13,6 +13,8 @@ function fromRow(row) {
     status: row.status,
     createdAt: row.created_at,
     deletedAt: row.deleted_at || null,
+    rejectReason: row.reject_reason || null,
+    tags: Array.isArray(row.tags) ? row.tags : [],
   };
 }
 
@@ -28,6 +30,7 @@ function toRow(item) {
     caption: item.caption,
     status: item.status,
     created_at: item.createdAt,
+    tags: item.tags || [],
   };
 }
 
@@ -109,15 +112,39 @@ async function getAnyItemById(id) {
   return data ? fromRow(data) : null;
 }
 
+// "Rastgele anı" için: onaylı anılardan rastgele birinin kimliği
+async function getRandomApprovedId() {
+  const { count, error } = await supabase
+    .from('items')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'approved')
+    .is('deleted_at', null);
+  if (error) throw error;
+  if (!count) return null;
+  const offset = Math.floor(Math.random() * count);
+  const { data, error: e2 } = await supabase
+    .from('items')
+    .select('id')
+    .eq('status', 'approved')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+    .range(offset, offset);
+  if (e2) throw e2;
+  return data && data.length ? data[0].id : null;
+}
+
 // ---------- Yumuşak silme / geri alma ----------
 
-async function softDeleteItem(id) {
-  const { error } = await supabase.from('items').update({ deleted_at: Date.now() }).eq('id', id);
+async function softDeleteItem(id, reason) {
+  const { error } = await supabase
+    .from('items')
+    .update({ deleted_at: Date.now(), reject_reason: reason ? String(reason).slice(0, 200) : null })
+    .eq('id', id);
   if (error) throw error;
 }
 
 async function restoreItem(id) {
-  const { error } = await supabase.from('items').update({ deleted_at: null }).eq('id', id);
+  const { error } = await supabase.from('items').update({ deleted_at: null, reject_reason: null }).eq('id', id);
   if (error) throw error;
 }
 
@@ -158,6 +185,7 @@ module.exports = {
   getPendingItemsByIp,
   getItemsByUserId,
   getAnyItemById,
+  getRandomApprovedId,
   insertItem,
   approveItem,
   softDeleteItem,

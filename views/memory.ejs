@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title><%= ogTitle %></title>
+<meta name="description" content="<%= ogDescription %>" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="CroShy Anı" />
+<meta property="og:title" content="<%= ogTitle %>" />
+<meta property="og:description" content="<%= ogDescription %>" />
+<meta property="og:url" content="<%= pageUrl %>" />
+<% if (ogImage) { %><meta property="og:image" content="<%= ogImage %>" /><meta name="twitter:image" content="<%= ogImage %>" /><% } %>
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" type="image/png" sizes="32x32" href="/img/logo-64.png" />
+<link rel="apple-touch-icon" href="/img/logo-192.png" />
+<script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#icerik">İçeriğe geç</a>
+  <div class="bg-blobs"><div class="blob b1"></div><div class="blob b2"></div></div>
+
+  <header class="site">
+    <a href="/" class="brand"><span class="brand-mark-wrap"><img src="/img/logo-192.png" alt="CroShy Anı logosu" /></span><span class="brand-text">CroShy Anı</span></a>
+    <nav class="site-nav">
+      <div class="social-dropdown" id="socialDropdown">
+        <button type="button" class="yt-link social-trigger" aria-label="Bağlantılar" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9.5 14.5 14.5 9.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M11 6.5 12.7 4.8a3.2 3.2 0 0 1 4.5 4.5L15.5 11" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13 17.5 11.3 19.2a3.2 3.2 0 0 1-4.5-4.5L8.5 13" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="social-menu">
+          <a href="https://youtube.com/CroShy" target="_blank" rel="noopener" class="social-menu-item">
+            <svg class="social-icon" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+              <rect width="28" height="28" rx="7" fill="#FF0000"/>
+              <path d="M11.5 9.4L19.6 14L11.5 18.6V9.4Z" fill="white"/>
+            </svg>
+            YouTube
+          </a>
+          <a href="https://discord.gg/Vp8JcCynZF" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-discord.png" alt="" />
+            Discord
+          </a>
+          <a href="https://kick.com/croshy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-kick.png" alt="" />
+            Kick
+          </a>
+          <a href="https://twitch.tv/croshyy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon" src="/img/social-twitch.png" alt="" />
+            Twitch
+          </a>
+          <a href="https://bynogame.com/destekle/croshy" target="_blank" rel="noopener" class="social-menu-item">
+            <img class="social-icon wordmark" src="/img/social-bynogame.png" alt="" />
+            Bağış Yap
+          </a>
+        </div>
+      </div>
+      <a href="/upload" class="btn small">Anı Ekle</a>
+      <form method="POST" action="/logout" style="margin:0;">
+        <button type="submit" class="btn small">Çıkış Yap</button>
+      </form>
+      <a href="/" class="btn ghost">← Ana Sayfa</a>
+    </nav>
+  </header>
+
+  <main class="memory-page" id="icerik" data-id="<%= item.id %>" data-logged-in="<%= loggedIn ? '1' : '0' %>" data-can-interact="<%= canInteract ? '1' : '0' %>">
+    <article class="memory-view">
+      <div class="memory-media">
+        <% if (item.type === 'video') { %>
+          <video src="<%= item.url %>" controls playsinline preload="metadata" aria-label="<%= item.caption %>"></video>
+        <% } else { %>
+          <img src="<%= cloudImg(item.url, 1600) %>" alt="<%= item.caption || 'Paylaşılan anı' %>" />
+        <% } %>
+      </div>
+
+      <div class="memory-info">
+        <div class="memory-owner">
+          <a href="/u/<%= encodeURIComponent(owner.username) %>" class="memory-owner-link">
+            <% if (owner.avatarUrl) { %><img class="memory-owner-avatar" src="<%= owner.avatarUrl %>" alt="" /><% } else { %><span class="memory-owner-avatar fallback"><%= owner.username.charAt(0).toUpperCase() %></span><% } %>
+            <span class="memory-owner-name"><%- ownerNameHtml %></span>
+          </a>
+          <time datetime="<%= new Date(item.createdAt).toISOString() %>"><%= new Date(item.createdAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) %></time>
+          <% if (item.status !== 'approved') { %><span class="code-status active">Onay bekliyor</span><% } %>
+        </div>
+
+        <% if (item.caption) { %><p class="memory-caption"><%- renderRich(item.caption) %></p><% } %>
+
+        <div class="memory-actions">
+          <button type="button" class="like-btn memory-like <%= likedByMe ? 'liked' : '' %>" id="memoryLike" aria-pressed="<%= likedByMe ? 'true' : 'false' %>" aria-label="Beğen">
+            <span class="heart"><%= likedByMe ? '❤️' : '🤍' %></span><span class="like-count" id="likeCount"><%= likeTotal %></span>
+          </button>
+          <div class="reaction-bar" id="reactionBar" role="group" aria-label="Tepkiler">
+            <% EMOJIS.forEach(function(e) { %>
+              <button type="button" class="react-btn <%= reactions.mine.includes(e) ? 'active' : '' %>" data-emoji="<%= e %>" aria-pressed="<%= reactions.mine.includes(e) ? 'true' : 'false' %>">
+                <span><%= e %></span><span class="react-count"><%= reactions.counts[e] || 0 %></span>
+              </button>
+            <% }) %>
+          </div>
+        </div>
+
+        <div class="memory-tools">
+          <button type="button" class="btn small" id="shareBtn" data-url="<%= pageUrl %>">🔗 Paylaş</button>
+          <a href="/random" class="btn small">🎲 Rastgele Anı</a>
+          <a href="/" class="btn small ghost">← Tüm Anılar</a>
+        </div>
+      </div>
+    </article>
+
+    <section class="comments" id="comments" aria-labelledby="commentsTitle">
+      <h2 id="commentsTitle">💬 Yorumlar (<span id="commentCount"><%= comments.length %></span>)</h2>
+
+      <% if (canInteract) { %>
+        <form class="comment-form" id="commentForm">
+          <textarea id="commentBody" maxlength="300" rows="2" placeholder="Bir yorum yaz… (@kullanıcı ile birini etiketleyebilirsin)" aria-label="Yorumun" required></textarea>
+          <div class="comment-form-row"><span class="fb-count" id="commentChars">0/300</span><button type="submit" class="btn primary small">Gönder</button></div>
+          <div class="fb-status" id="commentStatus" role="status"></div>
+        </form>
+      <% } else if (loggedIn) { %>
+        <p class="comment-note">Hesabının yorum yazma yetkisi şu an kısıtlı.</p>
+      <% } else { %>
+        <p class="comment-note">Yorum yazmak ve tepki vermek için <a href="/login?next=<%= encodeURIComponent('/m/' + item.id) %>" id="commentLogin">giriş yap</a>.</p>
+      <% } %>
+
+      <ul class="comment-list" id="commentList">
+        <% comments.forEach(function(c) { %>
+          <li class="comment" data-id="<%= c.id %>">
+            <% if (c.avatarUrl) { %><img class="comment-avatar" src="<%= c.avatarUrl %>" alt="" /><% } else { %><span class="comment-avatar fallback"><%= c.username.charAt(0).toUpperCase() %></span><% } %>
+            <div class="comment-main">
+              <div class="comment-head">
+                <a href="/u/<%= encodeURIComponent(c.username) %>" class="comment-author"><%- c.nameHtml %></a>
+                <time><%= new Date(c.createdAt).toLocaleString('tr-TR') %></time>
+                <% if (c.canDelete) { %><button type="button" class="comment-del" data-del="<%= c.id %>" aria-label="Yorumu sil">🗑️</button><% } %>
+              </div>
+              <div class="comment-body"><%- c.bodyHtml %></div>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+      <% if (comments.length === 0) { %><p class="comment-note" id="noComments">Henüz yorum yok. İlk yorumu sen yaz! ✨</p><% } %>
+    </section>
+  </main>
+
+  <footer class="site">CroShy Anı</footer>
+  <script src="/js/social-menu.js"></script>
+  <script src="/js/auth-nav.js"></script>
+  <script src="/js/feedback-widget.js"></script>
+  <script src="/js/memory-page.js"></script>
+</body>
+</html>

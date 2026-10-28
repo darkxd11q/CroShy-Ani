@@ -127,7 +127,7 @@
     <% if (locals.premium) { %>
       <div class="premium-banner">
         <span class="icon"><%= badges.includes('special') ? '💜' : '💠' %></span>
-        <span><strong><%= badges.includes('special') ? 'ÖZEL' : 'Plus' %> üyelik avantajların:</strong> yükleme sınırların %50 daha yüksek, günde en az 3 anı paylaşabiliyorsun ve 3 ekstra temayı kullanabiliyorsun.</span>
+        <span><strong><%= badges.includes('special') ? 'ÖZEL' : 'Plus' %> üyelik avantajların:</strong><% if (locals.premiumUntil) { %> <em>(<%= new Date(premiumUntil).toLocaleDateString('tr-TR') %> tarihine kadar)</em><% } %> yükleme sınırların %50 daha yüksek, günde en az 3 anı paylaşabiliyorsun ve 3 ekstra temayı kullanabiliyorsun.</span>
       </div>
     <% } %>
 
@@ -252,6 +252,23 @@
       <% } %>
     </div>
 
+    <div class="upload-card" style="margin-bottom: 20px;">
+      <h2 class="profile-section-title">🛡️ Verilerim ve Hesabım</h2>
+      <p class="profile-section-sub">KVKK kapsamındaki haklarını buradan kullanabilirsin. <a href="/gizlilik" style="color:var(--accent-3);">Gizlilik metnini oku</a></p>
+      <a href="/profile/export" class="btn small" download>⬇️ Verilerimi indir (JSON)</a>
+      <details class="danger-zone">
+        <summary>🗑️ Hesabımı sil</summary>
+        <p class="profile-section-sub">Hesabın, tüm anıların (Cloudinary dahil), yorumların ve verilerin <strong>kalıcı olarak</strong> silinir. Bu işlem geri alınamaz.</p>
+        <form method="POST" action="/profile/delete-account" style="display:flex; flex-direction:column; gap:10px;">
+          <input type="password" name="password" placeholder="Şifren" autocomplete="current-password" required
+                 style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body);" />
+          <input type="text" name="confirm" placeholder="Onay için kullanıcı adını yaz: <%= username %>" autocomplete="off" required
+                 style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body);" />
+          <button type="submit" class="btn danger small" onclick="return confirm('Hesabın kalıcı olarak silinecek. Emin misin?');">Hesabımı kalıcı olarak sil</button>
+        </form>
+      </details>
+    </div>
+
     <div class="upload-card">
       <h2 class="profile-section-title">🔒 Şifreni Değiştir</h2>
       <form method="POST" action="/profile/change-password">
@@ -275,7 +292,7 @@
     </div>
   </div>
 
-  <footer class="site">CroShy Anı · Bu sayfa ileride daha da geliştirilecek</footer>
+  <footer class="site">CroShy Anı · Bu sayfa ileride daha da geliştirilecek<span class="footer-links"> · <a href="/gizlilik">Gizlilik</a> · <a href="/kosullar">Şartlar</a> · <a href="/cerezler">Çerezler</a></span></footer>
 
   <div class="avatar-modal" id="avatarModal" hidden>
     <div class="avatar-modal-card">
@@ -299,10 +316,12 @@
   </div>
   <script>window.AVATAR_CFG = { canGif: <%= locals.canGif ? 'true' : 'false' %>, maxBytes: 5242880, maxGifBytes: 8388608 };</script>
   <script src="/js/name-style-editor.js"></script>
+  <script src="/js/cloud-upload.js"></script>
   <script src="/js/avatar-editor.js"></script>
   <script src="/js/social-menu.js"></script>
   <script src="/js/auth-nav.js"></script>
   <script src="/js/feedback-widget.js"></script>
   <script src="/js/auto-login-badge.js"></script>
+  <script src="/js/cookie-banner.js"></script>
 </body>
 </html>

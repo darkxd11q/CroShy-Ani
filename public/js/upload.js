@@ -218,7 +218,7 @@ form.addEventListener('submit', async (e) => {
     document.getElementById('caption').focus();
     return;
   }
-  if (!config || !config.cloudName || !config.uploadPreset) {
+  if (!config || !config.cloudName) {
     showStatus('Depolama servisi yapılandırılmamış. Sunucu .env dosyasını kontrol et.', 'err');
     return;
   }
@@ -277,10 +277,11 @@ form.addEventListener('submit', async (e) => {
   showStatus('Medya yükleniyor, lütfen bekle…', 'info');
 
   try {
-    const cloudUrl = `https://api.cloudinary.com/v1_1/${config.cloudName}/${resourceType}/upload`;
+    const target = await cloudUploadTarget('media', resourceType);
+    const cloudUrl = target.url;
     const formData = new FormData();
     formData.append('file', fileToUpload);
-    formData.append('upload_preset', config.uploadPreset);
+    Object.entries(target.fields).forEach(([k, v]) => formData.append(k, v));
 
     const cloudResult = await uploadWithProgress(cloudUrl, formData, (pct) => {
       progressSpan.style.width = pct + '%';

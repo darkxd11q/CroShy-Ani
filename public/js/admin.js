@@ -170,7 +170,16 @@ document.querySelectorAll('#approved-list [data-action="delete-approved"]').forE
     btn.disabled = true;
     const card = btn.closest('[data-id-row]');
     try {
-      await adminFetch(`/api/admin/delete-approved/${btn.dataset.id}`, { method: 'POST' });
+      const reason = prompt('Kaldırma nedeni (kullanıcıya bildirim olarak gösterilir; boş bırakabilirsin):', '');
+      if (reason === null) {
+        btn.disabled = false;
+        return;
+      }
+      await adminFetch(`/api/admin/delete-approved/${btn.dataset.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
       if (card) {
         card.style.transition = 'opacity 0.3s, transform 0.3s';
         card.style.opacity = '0';
@@ -221,13 +230,27 @@ async function handlePendingAction(id, action, btn) {
   const buttons = item.querySelectorAll('button');
   buttons.forEach((b) => (b.disabled = true));
 
-  if (action === 'ban' && !confirm('Bu IP adresi yasaklansın mı? Bu IP\'den bekleyen tüm gönderiler de silinecek.')) {
+  if (action === 'ban' && !confirm('Bu hesap yasaklansın mı? Hesabın bekleyen tüm gönderileri de silinecek.')) {
     buttons.forEach((b) => (b.disabled = false));
     return;
   }
 
+  let reason = '';
+  if (action === 'reject') {
+    const r = prompt('Red nedeni (kullanıcıya bildirim olarak gösterilir; boş bırakabilirsin):', '');
+    if (r === null) {
+      buttons.forEach((b) => (b.disabled = false));
+      return;
+    }
+    reason = r.trim();
+  }
+
   try {
-    await adminFetch(`/api/admin/${action}/${id}`, { method: 'POST' });
+    await adminFetch(`/api/admin/${action}/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
 
     if (action === 'ban') {
       // IP yasaklamak birden fazla öğeyi etkileyebilir (aynı IP'den bekleyenler),
@@ -369,7 +392,7 @@ async function handleUnban(ip, btn) {
       const data = await adminFetch('/api/admin/redeem-codes/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ badge }),
+        body: JSON.stringify({ badge, days: Number((document.getElementById('codeDays') || {}).value || 0) }),
       });
       currentCode = data.code;
       card.classList.remove('glow-special', 'glow-plus');
@@ -501,9 +524,61 @@ document.querySelectorAll('[data-fb-action]').forEach((btn) => {
         alert('Hata: ' + err.message);
       }
     });
-    actions.append(rename, del);
+    const ban = document.createElement('button');
+    ban.className = 'btn small';
+    ban.textContent = u.banned ? '✅ Yasağı Kaldır' : '🚫 Yasakla';
+    ban.addEventListener('click', async () => {
+      const reason = u.banned ? '' : prompt('Yasak nedeni (isteğe bağlı):', '');
+      if (reason === null) return;
+      try {
+        await adminFetch('/api/admin/users/ban', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u.username, banned: !u.banned, reason }),
+        });
+        search();
+      } catch (err) {
+        alert('Hata: ' + err.message);
+      }
+    });
+    const reset = document.createElement('button');
+    reset.className = 'btn small';
+    reset.textContent = '🔑 Şifre Sıfırla';
+    reset.addEventListener('click', async () => {
+      if (!confirm('"' + u.username + '" için geçici şifre üretilsin mi? Mevcut şifresi geçersiz olur.')) return;
+      try {
+        const r = await adminFetch('/api/admin/users/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u.username }),
+        });
+        prompt('Geçici şifre (kullanıcıya ilet; giriş yapınca profilinden değiştirmeli):', r.tempPassword);
+      } catch (err) {
+        alert('Hata: ' + err.message);
+      }
+    });
+    actions.append(rename, ban, reset, del);
 
     el.append(info, actions);
     return el;
   }
 })();
+
+
+// Yasaklı hesap listesindeki "Yasağı Kaldır" düğmeleri
+document.querySelectorAll('[data-unban-user]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      await adminFetch('/api/admin/users/ban', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: btn.dataset.unbanUser, banned: false }),
+      });
+      window.location.reload();
+    } catch (err) {
+      alert('Hata: ' + err.message);
+      btn.disabled = false;
+    }
+  });
+});

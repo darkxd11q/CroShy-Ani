@@ -8,10 +8,11 @@ function fromRow(row) {
     expiresAt: row.expires_at,
     redeemedBy: row.redeemed_by || null,
     redeemedAt: row.redeemed_at || null,
+    durationDays: row.duration_days || null,
   };
 }
 
-async function create({ code, badge, createdAt, expiresAt }) {
+async function create({ code, badge, createdAt, expiresAt, durationDays }) {
   const { error } = await supabase.from('redeem_codes').insert({
     code,
     badge,
@@ -19,6 +20,7 @@ async function create({ code, badge, createdAt, expiresAt }) {
     expires_at: expiresAt,
     redeemed_by: null,
     redeemed_at: null,
+    duration_days: durationDays || null,
   });
   if (error) throw error;
 }

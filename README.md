@@ -37,6 +37,12 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
 - **Haftanın Aktifi** ve **Haftanın Beğenileni** rozetleri her Cuma 17:15'te otomatik verilir; kazananı havalı bir kutlama ekranı karşılar ve 15 gün boyunca 2 ekstra tema kazanır
 - Sağ alttaki **geri bildirim** düğmesiyle fikir ve önerilerini ekibe iletebilirsin; katkın değerlendirilirse sana özel bir teşekkür ekranı karşılar
 - Kullanıcı adını 14 günde 2 kez değiştirebilirsin; ÖZEL, Plus ve haftalık rozet sahipleri adlarını harf harf ya da hazır gradyanlarla renklendirebilir
+- Sonsuz kaydırma: anılar sayfa sayfa yüklenir; videolar yalnızca ekrandayken oynar, görseller otomatik küçültülür
+- Her anının **paylaşılabilir bir sayfası** (`/m/...`) vardır: yorumlar, emoji tepkileri, paylaş düğmesi ve sosyal medya önizlemesi
+- `#etiket` ile anıları filtrele, `@kullanıcı` ile birini etiketle; 🎲 Rastgele Anı butonu
+- 🔔 Bildirim çanı: anın onaylandığında/reddedildiğinde (nedeniyle), yorum, beğeni, tepki ve etiketlerde haber alırsın
+- Beğeniler ve günlük paylaşım hakları **hesaba** bağlıdır (ortak internet bağlantısı kullanan arkadaşlar birbirini etkilemez)
+- KVKK: gizlilik, kullanım şartları ve çerez sayfaları; profilinden verilerini indirebilir ya da hesabını kalıcı silebilirsin
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**
@@ -80,6 +86,13 @@ anahtarını al.
 `.env.example` dosyasını `.env` olarak kopyala ve içindeki değerleri kendi
 bilgilerinle doldur.
 
+### 3.1. Veritabanı güncellemeleri (otomatik)
+
+`.env` içine Supabase'in **Database → Connection string** adresini `DATABASE_URL` olarak eklersen,
+sunucu açılışta `migrations/` klasöründeki güncellemeleri kendisi uygular (elle SQL çalıştırmana gerek kalmaz).
+Haftalık rozetler de veritabanında (`pg_cron`) çalıştığı için sunucu uyuyor olsa bile Cuma 17:15'te dağıtılır.
+`DATABASE_URL` vermezsen `supabase-schema.sql` dosyasını SQL Editor'de elle çalıştırman yeterlidir.
+
 ### 4. Çalıştırma
 
 ```bash
@@ -103,3 +116,11 @@ veri yerel diske yazılmaz — her şey Cloudinary ve Supabase'de tutulur).
 
 Deploy tamamlandığında siten `https://servis-adin.onrender.com` adresinde
 yayında olur.
+
+## Testler
+
+```bash
+npm test        # birim + rota testleri
+npm i           # (jsdom geliştirme bağımlılığı için)
+npm run test:ui # ana sayfa / anı sayfası / çan arayüz testleri
+```

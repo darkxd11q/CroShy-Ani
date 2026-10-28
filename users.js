@@ -1,6 +1,11 @@
 const supabase = require('./supabaseClient');
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function fromRow(row) {
+  // Süresi dolan rozetler okunurken otomatik olarak görünmez olur
+  const expiry = row.badge_expiry && typeof row.badge_expiry === 'object' ? row.badge_expiry : {};
+  const nowTs = Date.now();
   return {
     id: row.id,
     username: row.username,
@@ -11,7 +16,10 @@ function fromRow(row) {
     avatarUrl: row.avatar_url || null,
     avatarPublicId: row.avatar_public_id || null,
     nameStyle: row.name_style || null,
-    badges: Array.isArray(row.badges) ? row.badges : [],
+    badges: (Array.isArray(row.badges) ? row.badges : []).filter((b) => !(expiry[b] && Number(expiry[b]) < nowTs)),
+    badgeExpiry: expiry,
+    banned: !!row.banned,
+    bannedReason: row.banned_reason || null,
     customImageBytes: row.custom_image_bytes != null ? Number(row.custom_image_bytes) : null,
     customVideoBytes: row.custom_video_bytes != null ? Number(row.custom_video_bytes) : null,
     customVideoDurationSec: row.custom_video_duration_sec != null ? Number(row.custom_video_duration_sec) : null,
@@ -118,6 +126,32 @@ async function getAllAvatars() {
   }
 }
 
+// Yorum yazarlarını göstermek için: kimlik listesi -> { id: {username, avatarUrl, nameStyle} }
+async function getUsersByIds(ids) {
+  const list = [...new Set((ids || []).filter(Boolean))];
+  if (list.length === 0) return {};
+  const { data, error } = await supabase
+    .from('app_users')
+    .select('id, username, avatar_url, name_style, badges, badge_expiry')
+    .in('id', list);
+  if (error) throw error;
+  const out = {};
+  for (const row of data || []) {
+    const u = fromRow(row);
+    out[u.id] = { id: u.id, username: u.username, avatarUrl: u.avatarUrl, nameStyle: canStyleName(u) ? u.nameStyle : null, badges: u.badges };
+  }
+  return out;
+}
+
+// @bahsetmeleri için: kullanıcı adı listesi -> kullanıcılar (büyük/küçük harfe duyarsız)
+async function findUsersByUsernames(names) {
+  const lower = [...new Set((names || []).map((n) => String(n).toLowerCase()))];
+  if (lower.length === 0) return [];
+  const { data, error } = await supabase.from('app_users').select('*').in('username_lower', lower);
+  if (error) throw error;
+  return (data || []).map(fromRow);
+}
+
 async function setNameStyle(userId, style) {
   const { error } = await supabase.from('app_users').update({ name_style: style || null }).eq('id', userId);
   if (error) throw error;
@@ -130,7 +164,7 @@ async function searchUsers(q) {
   if (!term) return [];
   const { data, error } = await supabase
     .from('app_users')
-    .select('id, username, created_at, badges')
+    .select('id, username, created_at, badges, banned')
     .ilike('username_lower', '%' + term + '%')
     .limit(10);
   if (error) throw error;
@@ -139,6 +173,7 @@ async function searchUsers(q) {
     username: r.username,
     createdAt: Number(r.created_at),
     badges: Array.isArray(r.badges) ? r.badges : [],
+    banned: !!r.banned,
   }));
 }
 
@@ -250,15 +285,27 @@ async function listUsersWithCustomLimits() {
 
 // ---------- Rozetler ----------
 
-async function grantBadge(username, badge) {
+// days verilirse rozet süreli olur (tekrar kullanılırsa süre uzar); verilmezse süresizdir.
+async function grantBadge(username, badge, { days = null } = {}) {
   const user = await findUserByUsername(username);
   if (!user) return null;
-  if (user.badges.includes(badge)) return user;
 
-  const nextBadges = [...user.badges, badge];
+  const expiry = { ...(user.badgeExpiry || {}) };
+  const now = Date.now();
+  if (days) {
+    const holdsPermanent = user.badges.includes(badge) && !expiry[badge];
+    if (!holdsPermanent) {
+      const base = expiry[badge] && Number(expiry[badge]) > now ? Number(expiry[badge]) : now;
+      expiry[badge] = base + days * DAY_MS;
+    }
+  } else {
+    delete expiry[badge]; // süresiz
+  }
+
+  const nextBadges = user.badges.includes(badge) ? user.badges : [...user.badges, badge];
   const { data, error } = await supabase
     .from('app_users')
-    .update({ badges: nextBadges })
+    .update({ badges: nextBadges, badge_expiry: expiry })
     .eq('id', user.id)
     .select()
     .maybeSingle();
@@ -271,14 +318,56 @@ async function revokeBadge(username, badge) {
   if (!user) return null;
 
   const nextBadges = user.badges.filter((b) => b !== badge);
+  const expiry = { ...(user.badgeExpiry || {}) };
+  delete expiry[badge];
   const { data, error } = await supabase
     .from('app_users')
-    .update({ badges: nextBadges })
+    .update({ badges: nextBadges, badge_expiry: expiry })
     .eq('id', user.id)
     .select()
     .maybeSingle();
   if (error) throw error;
   return data ? fromRow(data) : null;
+}
+
+// ---------- Hesap bazlı yasak ----------
+async function setBanned(userId, banned, reason) {
+  const { error } = await supabase
+    .from('app_users')
+    .update({
+      banned: !!banned,
+      banned_reason: banned ? (reason ? String(reason).slice(0, 200) : null) : null,
+      banned_at: banned ? Date.now() : null,
+    })
+    .eq('id', userId);
+  if (error) throw error;
+}
+
+async function listBanned() {
+  const { data, error } = await supabase.from('app_users').select('*').eq('banned', true);
+  if (error) throw error;
+  return (data || []).map(fromRow);
+}
+
+// Süresi dolan rozetleri veritabanından da temizler; kimlerin ne kaybettiğini döndürür
+// (çağıran taraf onlara bildirim gönderir).
+async function purgeExpiredBadges() {
+  const { data, error } = await supabase.from('app_users').select('id, username, badges, badge_expiry');
+  if (error) throw error;
+  const now = Date.now();
+  const removed = [];
+  for (const row of data || []) {
+    const expiry = row.badge_expiry && typeof row.badge_expiry === 'object' ? row.badge_expiry : {};
+    const gone = Object.keys(expiry).filter((b) => Number(expiry[b]) < now);
+    if (gone.length === 0) continue;
+    const nextExpiry = { ...expiry };
+    gone.forEach((b) => delete nextExpiry[b]);
+    const nextBadges = (Array.isArray(row.badges) ? row.badges : []).filter((b) => !gone.includes(b));
+    const { error: upErr } = await supabase.from('app_users').update({ badges: nextBadges, badge_expiry: nextExpiry }).eq('id', row.id);
+    if (upErr) throw upErr;
+    gone.forEach((b) => removed.push({ userId: row.id, username: row.username, badge: b }));
+  }
+  return removed;
 }
 
 async function listUsersWithBadges() {
@@ -300,7 +389,12 @@ async function getWeeklyLeaderboard(since) {
   // beğenileri çekip eşleştirmeyi JS tarafında yapıyoruz) — art arda iki ağ
   // isteği yerine tek bir bekleme süresi, admin panelini belirgin hızlandırır.
   const [itemsRes, likesRes] = await Promise.all([
-    supabase.from('items').select('id, uploader_name, status, created_at').gt('created_at', cutoff),
+    supabase
+      .from('items')
+      .select('id, uploader_name, status, created_at')
+      .eq('status', 'approved') // bekleyen/reddedilen anılar sayılmaz
+      .is('deleted_at', null)
+      .gt('created_at', cutoff),
     supabase.from('likes').select('item_id'),
   ]);
   if (itemsRes.error) throw itemsRes.error;
@@ -349,7 +443,13 @@ module.exports = {
   getAllAvatars,
   canStyleName,
   setNameStyle,
+  getUsersByIds,
+  findUsersByUsernames,
   searchUsers,
+  setBanned,
+  listBanned,
+  purgeExpiredBadges,
+  _fromRow: fromRow,
   getNameChangeInfo,
   renameUser,
   deleteUser,

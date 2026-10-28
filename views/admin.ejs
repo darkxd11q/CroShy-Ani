@@ -102,7 +102,7 @@
           <div class="actions">
             <button class="btn approve small" data-action="approve" data-id="<%= item.id %>">✓ Onayla</button>
             <button class="btn danger small" data-action="reject" data-id="<%= item.id %>">✕ Reddet</button>
-            <button class="btn danger small" data-action="ban" data-id="<%= item.id %>" title="Bu IP'yi yasakla ve bekleyen tüm gönderilerini sil">🚫 IP Yasakla</button>
+            <button class="btn danger small" data-action="ban" data-id="<%= item.id %>" title="Bu hesabı yasakla ve bekleyen tüm gönderilerini sil">🚫 Hesabı Yasakla</button>
           </div>
         </div>
       <% }) %>
@@ -324,6 +324,25 @@
 
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
+        <h2 style="margin:0;">Yasaklı Hesaplar</h2>
+        <div class="admin-stat"><%= bannedUsers.length %> hesap yasaklı — anı gönderemez, beğenemez (siteyi görüntüleyebilir)</div>
+      </div>
+    </div>
+    <div class="pending-list" id="banned-users-list">
+      <% if (bannedUsers.length === 0) { %><div class="empty-state">Yasaklı hesap yok</div><% } %>
+      <% bannedUsers.forEach(function(u) { %>
+        <div class="pending-item" style="align-items:center;">
+          <div class="info">
+            <div class="name"><%= u.username %></div>
+            <div class="date"><%= u.bannedReason || 'Neden belirtilmemiş' %></div>
+          </div>
+          <div class="actions"><button class="btn approve small" data-unban-user="<%= u.username %>">Yasağı Kaldır</button></div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
         <h2 style="margin:0;">Hesap Yönetimi</h2>
         <div class="admin-stat">Kullanıcı adı ara — adını değiştir ya da hesabı sil</div>
       </div>
@@ -349,6 +368,7 @@
       <div class="code-display" id="codeDisplay"><span class="code-placeholder">DARK-1907-••••••••</span></div>
       <div class="code-meta" id="codeMeta">Bir rol seç ve kod oluştur</div>
       <div class="codegen-actions">
+        <select id="codeDays" class="code-days" aria-label="Rozet süresi"><option value="0">Süresiz</option><option value="7">7 gün</option><option value="30" selected>30 gün</option><option value="90">90 gün</option></select>
         <button type="button" class="btn primary" id="generateCodeBtn">✨ Kod Oluştur</button>
         <button type="button" class="btn" id="copyCodeBtn" style="display:none;">📋 Kopyala</button>
       </div>
@@ -365,7 +385,8 @@
           <div class="info">
             <div class="name badge-holder-row">
               <span class="code-mono"><%= c.code %></span>
-              <span class="badge-pill <%= info.className %>"><%= info.icon %> <%= info.label %></span>
+              \1
+              <span class="code-status active"><%= c.durationDays ? c.durationDays + ' gün' : 'süresiz' %></span>
               <span class="code-status <%= state %>"><%= state === 'used' ? 'Kullanıldı' : (state === 'expired' ? 'Süresi doldu' : 'Aktif') %></span>
             </div>
             <div class="date">
