@@ -1,6 +1,7 @@
 // Ara katmanlar: güvenlik başlıkları, oturum, otomatik giriş, tema/oturum koruması.
 const { REMEMBER_COOKIE, REWARD_THEMES, ROOT, STATIC_EXT, allowedThemesFor, app, awards, deletedUserIds, express, getCookie, helmet, isProd, issueRememberCookie, path, rememberTokens, renamedUsers, session, setThemeCookie, sha256, users } = require('./core');
 const { sessionStore } = require('./sessionStore');
+const admins = require('../admins');
 
 // "trust proxy" SADECE üretimde (Render'ın tek katmanlı ters proxy'si arkasında)
 // açık olmalı. Yerelde (npm start ile doğrudan çalıştırırken) bunu açık
@@ -35,6 +36,14 @@ app.use(
   })
 );
 app.use((req, res, next) => {
+  // Şifresi sıfırlanan / devre dışı bırakılan yöneticinin eski oturumlarını kapat
+  const aid = req.session && req.session.adminId;
+  if (aid && admins.revokedAt.has(aid) && (req.session.adminLoginAt || 0) < admins.revokedAt.get(aid)) {
+    return req.session.destroy(() => {
+      res.clearCookie('croshy.sid');
+      next();
+    });
+  }
   const uid = req.session && req.session.userId;
   if (uid && deletedUserIds.has(uid)) {
     return req.session.destroy(() => {
@@ -66,13 +75,25 @@ app.use(async (req, res, next) => {
 
     await rememberTokens.remove(record.tokenHash);
 
+    // Kişisel yönetici hesabıysa hâlâ var ve etkin mi?
+    let adminRec = null;
+    if (record.subjectType === 'admin' && record.subjectId && record.subjectId !== 'admin') {
+      adminRec = await admins.findById(record.subjectId);
+      if (!adminRec || adminRec.disabled) {
+        res.clearCookie(REMEMBER_COOKIE, { path: '/' });
+        return next();
+      }
+    }
+
     req.session.regenerate(async (err) => {
       try {
         if (err) return next();
 
         if (record.subjectType === 'admin') {
           req.session.isAdmin = true;
-          req.session.adminRole = record.role || 'superadmin';
+          req.session.adminRole = adminRec ? adminRec.role : record.role || 'superadmin';
+          req.session.adminId = adminRec ? adminRec.id : null;
+          req.session.adminLoginAt = Date.now();
         } else {
           req.session.userId = record.subjectId;
         }
@@ -83,7 +104,7 @@ app.use(async (req, res, next) => {
           subjectType: record.subjectType,
           subjectId: record.subjectId,
           username: record.username,
-          role: record.role,
+          role: adminRec ? adminRec.role : record.role,
         });
         next();
       } catch (e) {

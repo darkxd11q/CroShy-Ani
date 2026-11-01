@@ -96,3 +96,10 @@ test('yeni rotalar kayıtlı', () => {
     assert.ok(t.includes(r), 'eksik rota: ' + r);
   }
 });
+
+test('yeni güvenlik/şikayet rotaları kayıtlı', () => {
+  const t = routeTable();
+  for (const r of ['POST /api/memory/:id/report', 'POST /api/comments/:id/report', 'POST /api/admin/reports/resolve', 'POST /api/admin/admins/create', 'POST /api/admin/me/2fa/setup', 'POST /api/admin/me/2fa/enable', 'POST /api/admin/me/password']) {
+    assert.ok(t.includes(r), 'eksik rota: ' + r);
+  }
+});

@@ -34,6 +34,7 @@ async function serializeComments(rows, v, ownerId) {
       nameHtml: renderNameHtml(name, a && a.nameStyle),
       bodyHtml: renderRich(r.body),
       createdAt: r.createdAt,
+      isMine: !!v.id && v.id === r.userId,
       canDelete: v.isSuper || (!!v.id && (v.id === r.userId || v.id === ownerId)),
     };
   });
@@ -71,6 +72,7 @@ app.get(
       EMOJIS: social.EMOJIS,
       comments,
       loggedIn: !!v.id,
+      isOwner: !!v.id && v.id === item.userId,
       canInteract: !!v.id && !(me && me.banned),
       pageUrl: `${base}/m/${item.id}`,
       ogImage,

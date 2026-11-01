@@ -1,6 +1,7 @@
 // Uygulamayı bir araya getirir (dinlemeye başlamaz — testler de bunu kullanır).
 const { app } = require('./core');
 require('./middleware');
+require('./auditMiddleware');
 require('./routes/media');
 require('./routes/auth');
 require('./routes/admin');
@@ -11,6 +12,8 @@ require('./routes/uploads');
 require('./routes/social');
 require('./routes/notifications');
 require('./routes/legal');
+require('./routes/reports');
+require('./routes/admin_accounts');
 require('./routes/notfound');
 
 module.exports = app;

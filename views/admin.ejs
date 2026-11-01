@@ -108,6 +108,41 @@
       <% }) %>
     </div>
 
+    <div class="upload-card" id="myAdminCard" style="margin-top: 48px;">
+      <h2 class="profile-section-title">🔐 Yönetici Hesabım</h2>
+      <% if (!myAdmin.isDb) { %>
+        <p class="profile-section-sub">Bu giriş, sunucudaki <strong>acil durum hesabıdır</strong> (ortam değişkenleri). Kişisel bir yönetici hesabı — ve 2 adımlı doğrulama — için Süper Admin'den sana hesap açmasını iste.</p>
+      <% } else { %>
+        <% if (myAdmin.mustChange) { %><div class="login-error" style="margin-bottom:12px;">Geçici şifreyle giriş yaptın. Lütfen aşağıdan şifreni değiştir.</div><% } %>
+        <p class="profile-section-sub">2 adımlı doğrulama: <strong><%= myAdmin.totpEnabled ? 'AÇIK ✅' : 'kapalı' %></strong></p>
+        <% if (!myAdmin.totpEnabled) { %>
+          <button type="button" class="btn small" id="totpSetupBtn">2 adımlı doğrulamayı aç</button>
+          <div id="totpSetupBox" hidden style="margin-top:14px;">
+            <p class="profile-section-sub">Google Authenticator / Authy gibi bir uygulamayla QR kodu tara (ya da anahtarı elle gir), sonra uygulamadaki 6 haneli kodu yaz:</p>
+            <img id="totpQr" alt="2FA QR kodu" width="180" height="180" style="background:#fff; border-radius:12px; padding:6px;" />
+            <div style="margin:8px 0;"><code id="totpSecret" class="code-mono"></code></div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <input type="text" id="totpEnableCode" inputmode="numeric" maxlength="8" placeholder="6 haneli kod" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+              <button type="button" class="btn primary small" id="totpEnableBtn">Etkinleştir</button>
+            </div>
+          </div>
+        <% } else { %>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="password" id="totpDisablePw" placeholder="Şifren" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+            <input type="text" id="totpDisableCode" inputmode="numeric" maxlength="8" placeholder="Doğrulama kodu" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+            <button type="button" class="btn danger small" id="totpDisableBtn">Kapat</button>
+          </div>
+        <% } %>
+        <h3 style="margin:22px 0 8px; font-size:.95rem;">Şifreni değiştir</h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="password" id="pwCurrent" placeholder="Mevcut şifre" autocomplete="current-password" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+          <input type="password" id="pwNew" placeholder="Yeni şifre (en az 10 karakter)" autocomplete="new-password" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+          <button type="button" class="btn primary small" id="pwChangeBtn">Güncelle</button>
+        </div>
+      <% } %>
+      <div class="avatar-status" id="myAdminStatus" role="status"></div>
+    </div>
+
     <% if (adminRole === 'superadmin') { %>
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
@@ -294,6 +329,41 @@
 
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
+        <h2 style="margin:0;">Şikayetler</h2>
+        <div class="admin-stat"><%= reportGroups.length %> açık şikayet — en çok şikayet alan önde</div>
+      </div>
+    </div>
+    <div class="pending-list" id="report-list">
+      <% if (reportGroups.length === 0) { %><div class="empty-state">Açık şikayet yok 🎉</div><% } %>
+      <% reportGroups.forEach(function(g) { %>
+        <div class="pending-item" style="align-items:flex-start;">
+          <% if (g.item && g.item.type !== 'video') { %><div class="thumb"><img src="<%= g.item.url %>" alt="" /></div><% } %>
+          <div class="info">
+            <div class="name">
+              <% if (g.commentId) { %>💬 Yorum — <%= g.comment ? g.comment.username : 'silinmiş' %><% } else { %><%= g.item ? g.item.uploaderName : 'silinmiş anı' %> — anı<% } %>
+              <span class="code-status expired"><%= g.count %> şikayet</span>
+            </div>
+            <div class="caption" style="color:var(--text); overflow-wrap:anywhere;"><%= g.commentId ? (g.comment ? g.comment.body : '(yorum silinmiş)') : (g.item ? g.item.caption : '(anı kaldırılmış)') %></div>
+            <div class="date">
+              <% Object.keys(g.reasons).forEach(function(r) { %><%= reasonLabels[r] || r %> (<%= g.reasons[r] %>) · <% }) %>
+              <% if (g.item) { %><a href="/m/<%= g.itemId %>" target="_blank" rel="noopener" style="color:var(--accent-3);">sayfayı aç ↗</a><% } %>
+            </div>
+            <% g.details.slice(0, 3).forEach(function(d) { %><div class="date" style="font-style:italic;">“<%= d %>”</div><% }) %>
+          </div>
+          <div class="actions" style="flex-wrap:wrap;">
+            <button class="btn small" data-report-action="dismiss" data-item="<%= g.itemId %>" data-comment="<%= g.commentId || '' %>">Yoksay</button>
+            <% if (g.commentId && !g.commentGone) { %>
+              <button class="btn danger small" data-report-action="remove-comment" data-item="<%= g.itemId %>" data-comment="<%= g.commentId %>">🗑️ Yorumu sil</button>
+            <% } else if (!g.commentId && g.item) { %>
+              <button class="btn danger small" data-report-action="remove-item" data-item="<%= g.itemId %>" data-comment="">🗑️ Anıyı kaldır</button>
+            <% } %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
         <h2 style="margin:0;">Geri Bildirimler</h2>
         <div class="admin-stat"><%= feedbackList.filter(function(f){ return f.status === 'pending'; }).length %> bekleyen · Onaylarsan kullanıcı ilk girişinde teşekkür ekranı görür; "Çok Beğendim" ise daha samimi bir teşekkür + 🤝 Destekçi rozeti (+1 günlük hak) verir</div>
       </div>
@@ -351,6 +421,64 @@
       <input type="text" id="userSearch" placeholder="Kullanıcı adı ara…" maxlength="20" autocomplete="off"
              style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
       <div class="pending-list" id="user-results" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
+        <h2 style="margin:0;">Yöneticiler</h2>
+        <div class="admin-stat">Herkese kendi hesabı: işlemler kişiye yazılır, 2 adımlı doğrulama açılabilir. Acil durum hesapları (.env) çalışmaya devam eder; kişisel hesapları kurduktan sonra .env şifrelerini silebilirsin.</div>
+      </div>
+    </div>
+    <div class="upload-card" style="margin-bottom: 12px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <input type="text" id="newAdminName" maxlength="20" placeholder="Yeni yönetici adı" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+        <select id="newAdminRole" class="code-days"><option value="moderator">Moderatör</option><option value="superadmin">Süper Admin</option></select>
+        <button type="button" class="btn primary small" id="newAdminBtn">Hesap oluştur</button>
+      </div>
+    </div>
+    <div class="pending-list" id="admins-list">
+      <% if (adminList.length === 0) { %><div class="empty-state">Henüz kişisel yönetici hesabı yok</div><% } %>
+      <% adminList.forEach(function(a) { %>
+        <div class="pending-item" style="align-items:center;">
+          <div class="info">
+            <div class="name"><%= a.username %> <span class="code-status <%= a.disabled ? 'expired' : 'active' %>"><%= a.disabled ? 'Devre dışı' : (a.role === 'superadmin' ? 'Süper Admin' : 'Moderatör') %></span> <span class="code-status <%= a.totpEnabled ? 'active' : 'used' %>">2FA <%= a.totpEnabled ? 'açık' : 'kapalı' %></span></div>
+            <div class="date">Son giriş: <%= a.lastLoginAt ? new Date(a.lastLoginAt).toLocaleString('tr-TR') : 'henüz yok' %></div>
+          </div>
+          <div class="actions" style="flex-wrap:wrap;">
+            <button class="btn small" data-admin-action="reset" data-name="<%= a.username %>">🔑 Şifre sıfırla</button>
+            <button class="btn small" data-admin-action="<%= a.disabled ? 'enable' : 'disable' %>" data-name="<%= a.username %>"><%= a.disabled ? 'Etkinleştir' : 'Devre dışı bırak' %></button>
+            <button class="btn danger small" data-admin-action="delete" data-name="<%= a.username %>">Sil</button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="admin-topbar" style="margin-top: 48px;">
+      <div>
+        <h2 style="margin:0;">İşlem Kaydı</h2>
+        <div class="admin-stat">Son 150 yönetici işlemi (180 gün saklanır) — kim, ne zaman, neyi yaptı</div>
+      </div>
+    </div>
+    <div class="upload-card" style="margin-bottom: 20px;">
+      <input type="text" id="auditFilter" placeholder="Filtrele (yönetici, işlem, hedef)…" autocomplete="off"
+             style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text); margin-bottom:12px;" />
+      <div class="legal-table-wrap">
+        <table class="legal-table" id="auditTable">
+          <thead><tr><th>Zaman</th><th>Yönetici</th><th>İşlem</th><th>Hedef</th><th>Sonuç</th></tr></thead>
+          <tbody>
+            <% auditList.forEach(function(r) { %>
+              <tr>
+                <td><%= new Date(r.createdAt).toLocaleString('tr-TR') %></td>
+                <td><%= r.actor %><% if (r.role) { %> <small style="color:var(--text-dim);">(<%= r.role === 'superadmin' ? 'süper' : 'mod.' %>)</small><% } %></td>
+                <td><%= r.label || r.action %><% if (r.details && r.details !== '{}') { %><br><small style="color:var(--text-dim); overflow-wrap:anywhere;"><%= r.details %></small><% } %></td>
+                <td><%= r.target || '—' %></td>
+                <td><%= r.status && r.status < 400 ? '✅' : '⛔ ' + (r.status || '') %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% if (auditList.length === 0) { %><div class="empty-state">Henüz kayıt yok</div><% } %>
     </div>
 
     <div class="admin-topbar" style="margin-top: 48px;">

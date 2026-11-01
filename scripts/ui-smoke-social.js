@@ -15,7 +15,7 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
   const html = ejs.render(fs.readFileSync(P + '/views/memory.ejs', 'utf8'), {
     item: { id: 'abc', url: 'https://res.cloudinary.com/c/image/upload/v1/a.jpg', type: 'image', caption: 'merhaba', createdAt: Date.now(), status: 'approved', userId: 'u1' },
     owner: { username: 'mehmet', avatarUrl: null, nameStyle: null }, ownerNameHtml: 'mehmet', likeTotal: 3, likedByMe: true,
-    reactions: { counts: { '😂': 2 }, mine: ['😂'] }, EMOJIS: ['😂', '😮', '😢', '🔥', '👏', '🎉'], comments: [], loggedIn: true, canInteract: true,
+    reactions: { counts: { '😂': 2 }, mine: ['😂'] }, EMOJIS: ['😂', '😮', '😢', '🔥', '👏', '🎉'], comments: [], loggedIn: true, isOwner: false, canInteract: true,
     pageUrl: 'https://x.com/m/abc', ogImage: 'https://img/x.jpg', ogTitle: 't', ogDescription: 'd', renderRich, cloudImg,
   }, { filename: P + '/views/memory.ejs' });
   const dom = new JSDOM(stripScripts(html), { url: 'http://localhost/m/abc', pretendToBeVisual: true, runScripts: 'outside-only' });

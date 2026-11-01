@@ -43,6 +43,7 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
 - 🔔 Bildirim çanı: anın onaylandığında/reddedildiğinde (nedeniyle), yorum, beğeni, tepki ve etiketlerde haber alırsın
 - Beğeniler ve günlük paylaşım hakları **hesaba** bağlıdır (ortak internet bağlantısı kullanan arkadaşlar birbirini etkilemez)
 - KVKK: gizlilik, kullanım şartları ve çerez sayfaları; profilinden verilerini indirebilir ya da hesabını kalıcı silebilirsin
+- Uygunsuz içerikler için **şikayet et** düğmesi (anı ve yorumlar)
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**

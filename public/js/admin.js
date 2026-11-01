@@ -582,3 +582,133 @@ document.querySelectorAll('[data-unban-user]').forEach((btn) => {
     }
   });
 });
+
+
+// ---------- Şikayetler ----------
+document.querySelectorAll('[data-report-action]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const action = btn.dataset.reportAction;
+    if (action !== 'dismiss' && !confirm(action === 'remove-item' ? 'Bu anı yayından kaldırılsın mı?' : 'Bu yorum silinsin mi?')) return;
+    btn.disabled = true;
+    try {
+      await adminFetch('/api/admin/reports/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: btn.dataset.item, commentId: btn.dataset.comment || null, action }),
+      });
+      window.location.reload();
+    } catch (err) {
+      alert('Hata: ' + err.message);
+      btn.disabled = false;
+    }
+  });
+});
+
+// ---------- Yönetici hesapları ----------
+(function () {
+  const post = (url, body) =>
+    adminFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+
+  const createBtn = document.getElementById('newAdminBtn');
+  if (createBtn) {
+    createBtn.addEventListener('click', async () => {
+      const username = document.getElementById('newAdminName').value.trim();
+      if (!username) return;
+      try {
+        const r = await post('/api/admin/admins/create', { username, role: document.getElementById('newAdminRole').value });
+        prompt('"' + r.username + '" oluşturuldu. Geçici şifre (bir kez gösterilir, kişiye ilet):', r.tempPassword);
+        window.location.reload();
+      } catch (err) {
+        alert('Hata: ' + err.message);
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-admin-action]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name;
+      const action = btn.dataset.adminAction;
+      try {
+        if (action === 'reset') {
+          if (!confirm('"' + name + '" için geçici şifre üretilsin mi? Açık oturumları kapanır.')) return;
+          const r = await post('/api/admin/admins/reset-password', { username: name });
+          prompt('Geçici şifre (kişiye ilet):', r.tempPassword);
+        } else if (action === 'delete') {
+          if (!confirm('"' + name + '" yönetici hesabı silinsin mi?')) return;
+          await post('/api/admin/admins/delete', { username: name });
+        } else {
+          await post('/api/admin/admins/disable', { username: name, disabled: action === 'disable' });
+        }
+        window.location.reload();
+      } catch (err) {
+        alert('Hata: ' + err.message);
+      }
+    });
+  });
+
+  // ---- Kendi hesabım: 2FA + şifre ----
+  const status = document.getElementById('myAdminStatus');
+  const say = (msg, ok) => {
+    if (!status) return;
+    status.textContent = msg;
+    status.className = 'avatar-status' + (ok ? '' : ' err');
+  };
+
+  const setupBtn = document.getElementById('totpSetupBtn');
+  if (setupBtn) {
+    setupBtn.addEventListener('click', async () => {
+      try {
+        const r = await post('/api/admin/me/2fa/setup');
+        document.getElementById('totpQr').src = r.qr;
+        document.getElementById('totpSecret').textContent = r.secret;
+        document.getElementById('totpSetupBox').hidden = false;
+        setupBtn.hidden = true;
+      } catch (err) {
+        say(err.message);
+      }
+    });
+    document.getElementById('totpEnableBtn').addEventListener('click', async () => {
+      try {
+        await post('/api/admin/me/2fa/enable', { code: document.getElementById('totpEnableCode').value });
+        window.location.reload();
+      } catch (err) {
+        say(err.message);
+      }
+    });
+  }
+  const disableBtn = document.getElementById('totpDisableBtn');
+  if (disableBtn) {
+    disableBtn.addEventListener('click', async () => {
+      try {
+        await post('/api/admin/me/2fa/disable', { password: document.getElementById('totpDisablePw').value, code: document.getElementById('totpDisableCode').value });
+        window.location.reload();
+      } catch (err) {
+        say(err.message);
+      }
+    });
+  }
+  const pwBtn = document.getElementById('pwChangeBtn');
+  if (pwBtn) {
+    pwBtn.addEventListener('click', async () => {
+      try {
+        await post('/api/admin/me/password', { currentPassword: document.getElementById('pwCurrent').value, newPassword: document.getElementById('pwNew').value });
+        say('Şifren güncellendi. Diğer cihazlardaki oturumların kapatıldı.', true);
+        document.getElementById('pwCurrent').value = '';
+        document.getElementById('pwNew').value = '';
+      } catch (err) {
+        say(err.message);
+      }
+    });
+  }
+
+  // ---- İşlem kaydı filtresi ----
+  const filter = document.getElementById('auditFilter');
+  if (filter) {
+    filter.addEventListener('input', () => {
+      const q = filter.value.trim().toLowerCase();
+      document.querySelectorAll('#auditTable tbody tr').forEach((tr) => {
+        tr.hidden = !!q && !tr.textContent.toLowerCase().includes(q);
+      });
+    });
+  }
+})();

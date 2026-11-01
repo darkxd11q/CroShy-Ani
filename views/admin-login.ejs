@@ -24,8 +24,9 @@
         <% if (error) { %>
           <div class="login-error"><%= error %></div>
         <% } %>
-        <input type="text" name="username" placeholder="Kullanıcı adı" autocomplete="username" autofocus required />
+        <input type="text" name="username" placeholder="Kullanıcı adı" autocomplete="username" value="<%= locals.username || '' %>" autofocus required />
         <input type="password" name="password" placeholder="Şifre" autocomplete="current-password" required />
+        <input type="text" name="totp" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="2 adımlı doğrulama kodu (açıksa)" />
         <label class="remember-row"><input type="checkbox" name="remember" value="1" /> <span>Beni hatırla <em>(3 ay)</em></span></label>
         <button type="submit" class="btn primary" style="width:100%; justify-content:center;">Giriş Yap</button>
       </form>

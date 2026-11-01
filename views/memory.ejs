@@ -104,6 +104,7 @@
         <div class="memory-tools">
           <button type="button" class="btn small" id="shareBtn" data-url="<%= pageUrl %>">🔗 Paylaş</button>
           <a href="/random" class="btn small">🎲 Rastgele Anı</a>
+          <% if (loggedIn && !locals.isOwner) { %><button type="button" class="btn small ghost" id="reportBtn">🚩 Şikayet et</button><% } %>
           <a href="/" class="btn small ghost">← Tüm Anılar</a>
         </div>
       </div>
@@ -132,6 +133,7 @@
               <div class="comment-head">
                 <a href="/u/<%= encodeURIComponent(c.username) %>" class="comment-author"><%- c.nameHtml %></a>
                 <time><%= new Date(c.createdAt).toLocaleString('tr-TR') %></time>
+                <% if (loggedIn && !c.isMine) { %><button type="button" class="comment-report" data-report-comment="<%= c.id %>" aria-label="Yorumu şikayet et">🚩</button><% } %>
                 <% if (c.canDelete) { %><button type="button" class="comment-del" data-del="<%= c.id %>" aria-label="Yorumu sil">🗑️</button><% } %>
               </div>
               <div class="comment-body"><%- c.bodyHtml %></div>
@@ -142,6 +144,30 @@
       <% if (comments.length === 0) { %><p class="comment-note" id="noComments">Henüz yorum yok. İlk yorumu sen yaz! ✨</p><% } %>
     </section>
   </main>
+
+  <div class="report-modal" id="reportModal" hidden role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+    <div class="report-card">
+      <h3 id="reportTitle">🚩 Şikayet et</h3>
+      <label>Neden
+        <select id="reportReason">
+          <option value="uygunsuz">Uygunsuz içerik</option>
+          <option value="spam">Spam / reklam</option>
+          <option value="taciz">Taciz / nefret söylemi</option>
+          <option value="telif">Telif / izinsiz paylaşım</option>
+          <option value="kisisel">Kişisel bilgi / gizlilik</option>
+          <option value="diger">Diğer</option>
+        </select>
+      </label>
+      <label>Ayrıntı (isteğe bağlı)
+        <textarea id="reportDetails" maxlength="300" rows="3" placeholder="Neyin yanlış olduğunu kısaca anlat…"></textarea>
+      </label>
+      <div class="fb-status" id="reportStatus" role="status"></div>
+      <div class="report-actions">
+        <button type="button" class="btn primary small" id="reportSend">Gönder</button>
+        <button type="button" class="btn ghost small" id="reportCancel">Vazgeç</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="site">CroShy Anı</footer>
   <script src="/js/social-menu.js"></script>

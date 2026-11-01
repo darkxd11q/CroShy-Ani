@@ -7,6 +7,8 @@ const { sessionStore } = require('./sessionStore');
 const supabase = require('../supabaseClient');
 const users = require('../users');
 const { notify } = require('./notify');
+const { purgeOrphanUploads } = require('./orphans');
+const audit = require('./audit');
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -45,6 +47,8 @@ function startJobs() {
   every(60 * 60 * 1000, () => sessionStore.purgeExpired(), 60 * 1000);
   every(6 * 60 * 60 * 1000, purgePrivacyData, 90 * 1000);
   every(60 * 60 * 1000, purgeExpiredBadges, 120 * 1000);
+  every(24 * 60 * 60 * 1000, purgeOrphanUploads, 5 * 60 * 1000);
+  every(24 * 60 * 60 * 1000, () => audit.purgeOld(180 * 24 * 60 * 60 * 1000).catch((e) => console.error('İşlem kaydı temizliği:', e.message)), 3 * 60 * 1000);
   // <JOBS>
 }
 

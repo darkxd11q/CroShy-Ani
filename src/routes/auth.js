@@ -1,5 +1,8 @@
 // Giriş / kayıt / çıkış.
 const { adminGuard, adminLoginLimiter, app, asyncRoute, clearRememberCookie, crypto, hashPassword, isProd, issueRememberCookie, path, registerLimiter, requireSuperAdminApi, resolveNext, safeNext, safeStringEqual, session, syncThemeCookie, userGuard, userLoginLimiter, users, verifyHashedPassword, verifyPassword } = require('../core');
+const admins = require('../../admins');
+const totp = require('../lib/totp');
+const { record: auditRecord } = require('../audit');
 
 // ---------- Kullanıcı girişi / kaydı ----------
 
@@ -158,28 +161,61 @@ app.post(
     }
 
     const { username, password } = req.body;
+    const totpCode = String(req.body.totp || '').replace(/\s+/g, '');
     const modUsername = process.env.ADMIN_USERNAME || 'admin';
     const modPassword = process.env.ADMIN_PASSWORD || '';
     const superUsername = process.env.SUPERADMIN_USERNAME || 'dxrks91';
     const superPassword = process.env.SUPERADMIN_PASSWORD || '';
 
-    // İki farklı admin hesabından hangisiyle eşleştiğini bul. Önce kullanıcı
-    // adına bakılır (moderatör hesabıyla aynı isim/şifre kalıyor, sadece
-    // yetkileri kısıtlı — bkz. requireSuperAdminApi ve admin.ejs).
     let matchedRole = null;
-    if (safeStringEqual(username, modUsername) && verifyPassword(password, modPassword)) {
-      matchedRole = 'moderator';
-    } else if (safeStringEqual(username, superUsername) && verifyPassword(password, superPassword)) {
-      matchedRole = 'superadmin';
+    let loggedInUsername = null;
+
+    // 1) Kişisel (veritabanı) yönetici hesabı: kendi şifresi + (açıksa) 2 adımlı doğrulama kodu
+    let dbAdmin = null;
+    try {
+      dbAdmin = await admins.findByUsername(username);
+    } catch (e) {
+      console.error('Yönetici hesabı sorgulanamadı (acil durum hesaplarıyla devam):', e.message);
+    }
+
+    if (dbAdmin) {
+      if (verifyHashedPassword(password, dbAdmin.passwordHash) && !dbAdmin.disabled) {
+        if (dbAdmin.totpEnabled) {
+          if (!totpCode) {
+            return res.render('admin-login', { error: 'Doğrulama kodu gerekli (2 adımlı doğrulama açık).', needTotp: true, username });
+          }
+          let secret = null;
+          try {
+            secret = totp.decryptSecret(dbAdmin.totpSecret);
+          } catch {}
+          if (!secret || !totp.verifyTotp(secret, totpCode)) {
+            adminGuard.registerFailedAttempt(ip);
+            auditRecord({ actor: dbAdmin.username, action: 'admin_login_failed', label: 'Hatalı 2FA kodu', details: `IP: ${ip}`, status: 401 });
+            return res.render('admin-login', { error: 'Doğrulama kodu yanlış.', needTotp: true, username });
+          }
+        }
+        matchedRole = dbAdmin.role;
+        loggedInUsername = dbAdmin.username;
+      }
+    } else {
+      // 2) Acil durum hesapları (.env): hesap kurulana/2FA'ya geçilene kadar çalışır
+      if (safeStringEqual(username, modUsername) && verifyPassword(password, modPassword)) {
+        matchedRole = 'moderator';
+        loggedInUsername = modUsername;
+      } else if (safeStringEqual(username, superUsername) && verifyPassword(password, superPassword)) {
+        matchedRole = 'superadmin';
+        loggedInUsername = superUsername;
+      }
     }
 
     if (!matchedRole) {
       adminGuard.registerFailedAttempt(ip);
-      return res.render('admin-login', { error: 'Kullanıcı adı veya şifre yanlış.' });
+      auditRecord({ actor: String(username || '?').slice(0, 40), action: 'admin_login_failed', label: 'Başarısız admin girişi', details: `IP: ${ip}`, status: 401 });
+      return res.render('admin-login', { error: 'Kullanıcı adı veya şifre yanlış.', username });
     }
 
     adminGuard.resetAttempts(ip);
-    const loggedInUsername = matchedRole === 'moderator' ? modUsername : superUsername;
+    if (dbAdmin) admins.touchLogin(dbAdmin.id).catch(() => {});
 
     req.session.regenerate(async (err) => {
       try {
@@ -187,14 +223,18 @@ app.post(
         req.session.isAdmin = true;
         req.session.adminRole = matchedRole;
         req.session.username = loggedInUsername;
-        if (req.body.remember) {
+        req.session.adminId = dbAdmin ? dbAdmin.id : null;
+        req.session.adminLoginAt = Date.now();
+        // 2 adımlı doğrulaması açık hesaplar için "beni hatırla" verilmez (2FA'yı atlatmasın)
+        if (req.body.remember && !(dbAdmin && dbAdmin.totpEnabled)) {
           issueRememberCookie(res, {
             subjectType: 'admin',
-            subjectId: 'admin',
+            subjectId: dbAdmin ? dbAdmin.id : 'admin',
             username: loggedInUsername,
             role: matchedRole,
           });
         }
+        auditRecord({ actor: loggedInUsername, role: matchedRole, action: 'admin_login', label: 'Admin girişi', status: 200 });
         res.redirect('/admin');
       } catch (e) {
         console.error('Admin girişi sonrası hata:', e.message);

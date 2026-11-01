@@ -162,4 +162,46 @@
       alert(err.message);
     }
   });
+
+  // ---- Şikayet et (anı ya da yorum) ----
+  const reportModal = document.getElementById('reportModal');
+  if (reportModal) {
+    let target = null;
+    const status = document.getElementById('reportStatus');
+    const send = document.getElementById('reportSend');
+    const open = (t) => {
+      target = t;
+      status.textContent = '';
+      status.className = 'fb-status';
+      document.getElementById('reportDetails').value = '';
+      reportModal.hidden = false;
+      document.getElementById('reportReason').focus();
+    };
+    const close = () => (reportModal.hidden = true);
+
+    const reportBtn = document.getElementById('reportBtn');
+    if (reportBtn) reportBtn.addEventListener('click', () => open({ type: 'item' }));
+    document.getElementById('commentList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-report-comment]');
+      if (b) open({ type: 'comment', id: b.dataset.reportComment });
+    });
+    document.getElementById('reportCancel').addEventListener('click', close);
+    reportModal.addEventListener('click', (e) => e.target === reportModal && close());
+    document.addEventListener('keydown', (e) => e.key === 'Escape' && !reportModal.hidden && close());
+
+    send.addEventListener('click', async () => {
+      send.disabled = true;
+      try {
+        const url = target.type === 'comment' ? '/api/comments/' + target.id + '/report' : '/api/memory/' + id + '/report';
+        const d = await api(url, { reason: document.getElementById('reportReason').value, details: document.getElementById('reportDetails').value });
+        status.textContent = d.duplicate ? 'Bu içeriği zaten şikayet etmiştin. Teşekkürler.' : 'Şikayetin iletildi. Teşekkürler 🙏';
+        status.className = 'fb-status ok';
+        setTimeout(close, 1600);
+      } catch (err) {
+        status.textContent = err.message;
+        status.className = 'fb-status err';
+      }
+      send.disabled = false;
+    });
+  }
 })();

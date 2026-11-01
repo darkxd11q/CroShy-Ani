@@ -1654,3 +1654,15 @@ footer.site {
 a.notif-item:hover { background: rgba(255,255,255,.05); }
 .notif-item.unread { background: rgba(139,92,246,.1); }
 .notif-item time { color: var(--text-dim); font-size: .72rem; }
+
+
+/* ==================== Şikayet penceresi ==================== */
+.comment-report { border: none; background: transparent; cursor: pointer; opacity: .45; font-size: .8rem; }
+.comment-report:hover { opacity: 1; }
+.report-modal { position: fixed; inset: 0; z-index: 950; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(3,2,6,.78); backdrop-filter: blur(8px); }
+.report-modal[hidden] { display: none; }
+.report-card { width: 100%; max-width: 380px; padding: 22px 20px 18px; border-radius: 20px; background: rgba(16,14,24,.98); border: 1px solid var(--card-border); display: flex; flex-direction: column; gap: 12px; }
+.report-card h3 { margin: 0; font-family: var(--font-head); }
+.report-card label { display: flex; flex-direction: column; gap: 6px; font-size: .84rem; color: var(--text-dim); }
+.report-card select, .report-card textarea { font: inherit; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--card-border); color: var(--text); }
+.report-actions { display: flex; gap: 8px; justify-content: flex-end; }

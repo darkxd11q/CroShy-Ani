@@ -14,6 +14,9 @@ async function supabase_cleanup(userId) {
 } // hashPassword, crypto, rememberTokens vb.
 const { notify } = require('../notify');
 const { extractMentions } = require('../lib/richtext');
+const reportsDb = require('../../reports');
+const adminsDb = require('../../admins');
+const auditDb = require('../audit');
 const { invalidateSnapshot } = require('../snapshot');
 
 app.get(
@@ -40,6 +43,10 @@ app.get(
       redeemCodeList,
       feedbackList,
       bannedUsers,
+      reportGroups,
+      adminList,
+      auditList,
+      myAdminRecord,
     ] = await Promise.all([
       db.getPendingItems(),
       db.getApprovedCount(),
@@ -54,6 +61,10 @@ app.get(
       isSuperAdmin ? redeemCodes.listRecent(25) : Promise.resolve([]),
       isSuperAdmin ? feedback.listForAdmin(60).catch(() => []) : Promise.resolve([]),
       isSuperAdmin ? users.listBanned().catch(() => []) : Promise.resolve([]),
+      isSuperAdmin ? reportsDb.listGroupedForAdmin().catch(() => []) : Promise.resolve([]),
+      isSuperAdmin ? adminsDb.list().catch(() => []) : Promise.resolve([]),
+      isSuperAdmin ? auditDb.listRecent(150).catch(() => []) : Promise.resolve([]),
+      req.session.adminId ? adminsDb.findById(req.session.adminId).catch(() => null) : Promise.resolve(null),
     ]);
 
     const approvedItems = approvedRaw
@@ -68,6 +79,15 @@ app.get(
       redeemCodeList,
       feedbackList,
       bannedUsers,
+      reportGroups,
+      adminList: adminList.map((a) => ({ username: a.username, role: a.role, totpEnabled: a.totpEnabled, disabled: a.disabled, lastLoginAt: a.lastLoginAt })),
+      auditList,
+      reasonLabels: reportsDb.REASONS,
+      myAdmin: {
+        isDb: !!myAdminRecord,
+        totpEnabled: !!(myAdminRecord && myAdminRecord.totpEnabled),
+        mustChange: !!(myAdminRecord && myAdminRecord.mustChangePassword),
+      },
       deleteRetentionMs: DELETE_RETENTION_MS,
       username: req.session.username || 'admin',
       adminRole: req.session.adminRole || 'superadmin',
