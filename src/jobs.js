@@ -49,6 +49,7 @@ function startJobs() {
   every(60 * 60 * 1000, purgeExpiredBadges, 120 * 1000);
   every(24 * 60 * 60 * 1000, purgeOrphanUploads, 5 * 60 * 1000);
   every(24 * 60 * 60 * 1000, () => audit.purgeOld(180 * 24 * 60 * 60 * 1000).catch((e) => console.error('İşlem kaydı temizliği:', e.message)), 3 * 60 * 1000);
+  every(60 * 60 * 1000, () => require('../rememberTokens').purgeExpired().catch((e) => console.error('Belirteç temizliği:', e.message)), 150 * 1000);
   // <JOBS>
 }
 

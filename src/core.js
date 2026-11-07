@@ -227,19 +227,23 @@ function getCookie(req, name) {
 // zorunda kalmaz — bu, admin/kullanıcı girişindeki en büyük gecikme
 // kaynağıydı. Arka plan yazması başarısız olsa bile giriş etkilenmez;
 // tek sonucu o oturum için "beni hatırla"nın çalışmaması olur.
-function issueRememberCookie(res, { subjectType, subjectId, username, role }) {
-  const raw = crypto.randomBytes(32).toString('hex');
+function issueRememberCookie(res, { subjectType, subjectId, username, role, raw: givenRaw, skipInsert }) {
+  const raw = givenRaw || crypto.randomBytes(32).toString('hex');
   const tokenHash = sha256(raw);
 
+  // SameSite=Lax: Discord/Twitch/YouTube gibi dış bir bağlantıdan gelen İLK sayfa açılışında da
+  // hatırlanan kullanıcı doğrudan girer (Strict olsaydı çerez o ilk istekte gönderilmezdi).
+  // Oturum çerezi Strict kalır; durum değiştiren (POST) isteklere Lax çerez zaten gönderilmez.
   res.cookie(REMEMBER_COOKIE, raw, {
     httpOnly: true,
-    sameSite: 'strict',
+    sameSite: 'lax',
     secure: isProd,
     maxAge: REMEMBER_MS,
     path: '/',
   });
 
-  rememberTokens
+  if (skipInsert) return Promise.resolve();
+  return rememberTokens
     .create({
       tokenHash,
       subjectType,

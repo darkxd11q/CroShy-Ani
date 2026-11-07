@@ -11,7 +11,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node --test",
-    "test:ui": "node scripts/ui-smoke-home.js && node scripts/ui-smoke-social.js && node scripts/ui-smoke-admin.js"
+    "test:ui": "node scripts/ui-smoke-home.js && node scripts/ui-smoke-social.js && node scripts/ui-smoke-admin.js && node scripts/ui-smoke-menus.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

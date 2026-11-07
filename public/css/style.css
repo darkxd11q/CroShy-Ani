@@ -1666,3 +1666,62 @@ a.notif-item:hover { background: rgba(255,255,255,.05); }
 .report-card label { display: flex; flex-direction: column; gap: 6px; font-size: .84rem; color: var(--text-dim); }
 .report-card select, .report-card textarea { font: inherit; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--card-border); color: var(--text); }
 .report-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+
+/* ==================== Üst menü: tek açılır hesap menüsü ==================== */
+.nav-menu { position: relative; }
+.nav-menu-btn { display: inline-flex; align-items: center; gap: 8px; max-width: 200px; }
+.nav-menu-btn .caret { font-size: .7rem; opacity: .7; transition: transform .2s ease; }
+.nav-menu-btn[aria-expanded="true"] .caret { transform: rotate(180deg); }
+.nav-menu-panel {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 910; min-width: 230px; padding: 6px;
+  border-radius: 16px; background: rgba(16,14,24,.98); border: 1px solid var(--card-border); backdrop-filter: blur(14px);
+  box-shadow: 0 30px 80px -20px rgba(0,0,0,.85); animation: fadeUp .18s ease both;
+}
+.nav-menu-panel[hidden] { display: none; }
+.nav-menu-panel form { margin: 0; }
+.nav-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 10px; border: none; background: none;
+  font: inherit; font-size: .88rem; color: var(--text); cursor: pointer; text-align: left;
+}
+.nav-menu-item:hover, .nav-menu-item:focus-visible { background: rgba(255,255,255,.08); }
+.nav-menu-sep { height: 1px; margin: 6px 4px; background: var(--card-border); }
+.nav-add { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 560px) {
+  .nav-add-label, .nav-menu-btn .nav-user-name { display: none; }
+  .nav-cluster { gap: 6px; }
+  .nav-menu-btn { padding-left: 10px; padding-right: 10px; }
+}
+
+/* ==================== Profil: kategori akordeonu ==================== */
+.acc { border: 1px solid var(--card-border); border-radius: 20px; background: rgba(255,255,255,.04); margin-bottom: 14px; overflow: hidden; }
+.acc-summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 16px 20px;
+  font-family: var(--font-head); font-weight: 700; font-size: 1.02rem; user-select: none;
+}
+.acc-summary::-webkit-details-marker { display: none; }
+.acc-summary::after { content: '＋'; margin-left: 6px; color: var(--text-dim); font-weight: 400; }
+.acc[open] > .acc-summary::after { content: '−'; }
+.acc-summary:hover { background: rgba(255,255,255,.04); }
+.acc-hint { margin-left: auto; color: var(--text-dim); font-family: var(--font-body); font-weight: 400; font-size: .76rem; text-align: right; }
+.acc-body { padding: 4px 20px 18px; }
+.acc-body .upload-card { background: none; border: none; box-shadow: none; padding: 0; margin: 0 0 24px; }
+.acc-body .upload-card:last-child, .acc-body > :last-child { margin-bottom: 0; }
+.acc-sub { font-size: .98rem; margin: 18px 0 10px; }
+.acc-body > .acc-sub:first-child { margin-top: 4px; }
+@media (max-width: 560px) { .acc-hint { display: none; } }
+
+/* ==================== Admin: kategori sekmeleri ==================== */
+.admin-tabs {
+  position: sticky; top: 0; z-index: 40; display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; margin: 10px 0 8px;
+  background: linear-gradient(var(--bg) 75%, transparent); scrollbar-width: none;
+}
+.admin-tabs::-webkit-scrollbar { display: none; }
+.admin-tab {
+  position: relative; flex-shrink: 0; font: inherit; font-weight: 700; font-size: .86rem; padding: 10px 16px; border-radius: 999px; cursor: pointer;
+  color: var(--text-dim); background: rgba(255,255,255,.05); border: 1px solid var(--card-border); transition: all .2s ease;
+}
+.admin-tab:hover { color: var(--text); }
+.admin-tab[aria-selected="true"] { color: #fff; border-color: transparent; background: linear-gradient(120deg, var(--accent-1), var(--accent-2)); }
+.admin-tab .tab-count { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: .7rem; background: #ef4444; color: #fff; }
+.admin-sec[hidden] { display: none; }

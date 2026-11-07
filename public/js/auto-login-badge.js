@@ -1,8 +1,7 @@
 (async function () {
   try {
-    const res = await fetch('/api/session-status');
-    if (!res.ok) return;
-    const data = await res.json();
+    // auth-nav.js ile AYNI isteği paylaşır (iki paralel istek yarışına girmesin)
+    const data = await (window.getSessionStatus ? window.getSessionStatus() : fetch('/api/session-status').then((r) => r.json()));
 
     if (data.justAutoLoggedIn) {
       // ÖZEL / Plus üyelere özel, daha havalı bir karşılama göstermek için rolü öğren.

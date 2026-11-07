@@ -3,6 +3,14 @@
 //  üye      : Anı Ekle · Kod · Profil (isim) · Çıkış
 //  admin    : Admin Paneli · Çıkış
 // Giriş penceresi, /login ve /register sayfalarıyla AYNI karttır (sunucudan gelir).
+// Oturum durumu: sayfadaki tüm betikler AYNI isteği paylaşır (paralel istek yarışı olmasın).
+window.getSessionStatus =
+  window.getSessionStatus ||
+  function () {
+    if (!window.__sessionStatusP) window.__sessionStatusP = fetch('/api/session-status').then((r) => r.json());
+    return window.__sessionStatusP;
+  };
+
 (function () {
   const nav = document.querySelector('.site-nav');
   if (!nav) return;
@@ -16,8 +24,8 @@
   cluster.className = 'nav-cluster';
   nav.appendChild(cluster);
 
-  fetch('/api/session-status')
-    .then((r) => r.json())
+  window
+    .getSessionStatus()
     .then(render)
     .catch(() => render({ loggedIn: false }));
 
@@ -41,28 +49,135 @@
     return f;
   }
 
+  // Hesap menüsü: Profilim / Genel profilim / Kod / Çıkış tek bir tuşun arkasında
+  function accountMenu(name) {
+    const root = document.createElement('div');
+    root.className = 'nav-menu';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn nav-menu-btn';
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', 'Hesap menüsü: ' + name);
+    const dot = document.createElement('span');
+    dot.className = 'nav-user-dot';
+    dot.textContent = (name || '?').charAt(0).toUpperCase();
+    const label = document.createElement('span');
+    label.className = 'nav-user-name';
+    label.textContent = name;
+    const caret = document.createElement('span');
+    caret.className = 'caret';
+    caret.textContent = '▾';
+    btn.append(dot, label, caret);
+
+    const panel = document.createElement('div');
+    panel.className = 'nav-menu-panel';
+    panel.hidden = true;
+    panel.setAttribute('role', 'menu');
+
+    const item = (href, text) => {
+      const a = document.createElement('a');
+      a.href = href;
+      a.className = 'nav-menu-item';
+      a.setAttribute('role', 'menuitem');
+      a.textContent = text;
+      return a;
+    };
+    const sep = () => {
+      const d = document.createElement('div');
+      d.className = 'nav-menu-sep';
+      d.setAttribute('role', 'separator');
+      return d;
+    };
+    const logout = document.createElement('form');
+    logout.method = 'POST';
+    logout.action = '/logout';
+    const lo = document.createElement('button');
+    lo.type = 'submit';
+    lo.className = 'nav-menu-item';
+    lo.setAttribute('role', 'menuitem');
+    lo.textContent = '🚪 Çıkış yap';
+    logout.appendChild(lo);
+
+    panel.append(item('/profile', '👤 Profilim'), item('/u/' + encodeURIComponent(name), '🌐 Herkese açık profilim'), item('/redeem', '🎟️ Kod kullan'), sep(), logout);
+    root.append(btn, panel);
+
+    const items = () => [...panel.querySelectorAll('[role="menuitem"]')];
+    function close(focusBtn) {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+      if (focusBtn) btn.focus();
+    }
+    function onDoc(e) {
+      if (!root.contains(e.target)) close(false);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') return close(true);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const list = items();
+        const i = list.indexOf(document.activeElement);
+        const next = e.key === 'ArrowDown' ? (i + 1) % list.length : (i - 1 + list.length) % list.length;
+        list[next].focus();
+      }
+    }
+    function open() {
+      panel.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      document.addEventListener('click', onDoc, true);
+      document.addEventListener('keydown', onKey);
+    }
+    btn.addEventListener('click', () => (panel.hidden ? open() : close(false)));
+    return root;
+  }
+
+  function addButton() {
+    const a = document.createElement('a');
+    a.href = '/upload';
+    a.className = 'btn primary nav-add';
+    const plus = document.createElement('span');
+    plus.className = 'nav-add-plus';
+    plus.textContent = '＋';
+    const text = document.createElement('span');
+    text.className = 'nav-add-label';
+    text.textContent = 'Anı Ekle';
+    a.append(plus, text);
+    return a;
+  }
+
   function render(s) {
     cluster.textContent = '';
     if (s.loggedIn && s.isAdmin) {
       cluster.append(link('/admin', 'btn primary', '🛡️ Admin Paneli'), logoutForm('/admin/logout'));
     } else if (s.loggedIn) {
-      const profile = link('/profile', 'btn nav-user', '');
-      const dot = document.createElement('span');
-      dot.className = 'nav-user-dot';
-      dot.textContent = (s.username || '?').charAt(0).toUpperCase();
-      const name = document.createElement('span');
-      name.className = 'nav-user-name';
-      name.textContent = s.username;
-      profile.append(dot, name);
-      const bell = buildBell();
-      cluster.append(link('/upload', 'btn primary', '+ Anı Ekle'), link('/redeem', 'btn', '🎟️ Kod'), bell, profile, logoutForm('/logout'));
+      cluster.append(buildBell(), addButton(), accountMenu(s.username));
     } else {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'btn';
       b.textContent = 'Giriş Yap';
-      b.addEventListener('click', () => openAuthModal('login'));
-      cluster.append(b, link('/upload', 'btn primary', '+ Anı Ekle'));
+      // Önce sessizce dene: "beni hatırla" 3 ay içinde geçerliyse doğrudan hesaba girer, değilse pencere açılır
+      b.addEventListener('click', async () => {
+        if (b.disabled) return;
+        const old = b.textContent;
+        b.disabled = true;
+        b.textContent = 'Kontrol ediliyor…';
+        try {
+          const r = await fetch('/api/quick-login', { method: 'POST' }).then((x) => x.json());
+          if (r && r.ok) {
+            location.reload();
+            return;
+          }
+        } catch {}
+        b.disabled = false;
+        b.textContent = old;
+        openAuthModal('login');
+      });
+      cluster.append(b, addButton());
       if (location.hash === '#giris') openAuthModal('login');
     }
   }

@@ -23,7 +23,7 @@ function routeTable() {
 
 test('önemli rotalar kayıtlı', () => {
   const t = routeTable();
-  for (const r of ['GET /', 'GET /login', 'POST /login', 'GET /api/approved', 'POST /api/submit', 'POST /api/upload-signature', 'GET /admin', 'POST /api/admin/approve/:id']) {
+  for (const r of ['POST /api/quick-login', 'GET /', 'GET /login', 'POST /login', 'GET /api/approved', 'POST /api/submit', 'POST /api/upload-signature', 'GET /admin', 'POST /api/admin/approve/:id']) {
     assert.ok(t.includes(r), 'eksik rota: ' + r);
   }
 });

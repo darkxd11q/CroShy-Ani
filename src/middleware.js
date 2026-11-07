@@ -1,6 +1,13 @@
 // Ara katmanlar: güvenlik başlıkları, oturum, otomatik giriş, tema/oturum koruması.
 const { REMEMBER_COOKIE, REWARD_THEMES, ROOT, STATIC_EXT, allowedThemesFor, app, awards, deletedUserIds, express, getCookie, helmet, isProd, issueRememberCookie, path, rememberTokens, renamedUsers, session, setThemeCookie, sha256, users } = require('./core');
 const { sessionStore } = require('./sessionStore');
+const nodeCrypto = require('crypto');
+const { pickRotation, pruneRotations } = require('./lib/rotation');
+
+// Belirteç döndürme tolerans süresi (aynı anda gelen paralel istekler için)
+const REMEMBER_GRACE_MS = 2 * 60 * 1000;
+const rotations = new Map();
+setInterval(() => pruneRotations(rotations, Date.now()), 60 * 1000).unref();
 const admins = require('../admins');
 
 // "trust proxy" SADECE üretimde (Render'ın tek katmanlı ters proxy'si arkasında)
@@ -73,7 +80,9 @@ app.use(async (req, res, next) => {
       return next();
     }
 
-    await rememberTokens.remove(record.tokenHash);
+    // Belirteç döndürme: eskisi 2 dk daha geçerli kalır, aynı anda gelen istekler aynı yeni belirteci alır
+    const rotation = pickRotation(rotations, record.tokenHash, Date.now(), REMEMBER_GRACE_MS, () => nodeCrypto.randomBytes(32).toString('hex'));
+    if (!rotation.reused) await rememberTokens.expireSoon(record.tokenHash, REMEMBER_GRACE_MS);
 
     // Kişisel yönetici hesabıysa hâlâ var ve etkin mi?
     let adminRec = null;
@@ -100,11 +109,13 @@ app.use(async (req, res, next) => {
         req.session.username = record.username;
         req.session.justAutoLoggedIn = true;
 
-        issueRememberCookie(res, {
+        await issueRememberCookie(res, {
           subjectType: record.subjectType,
           subjectId: record.subjectId,
           username: record.username,
           role: adminRec ? adminRec.role : record.role,
+          raw: rotation.raw,
+          skipInsert: rotation.reused,
         });
         next();
       } catch (e) {

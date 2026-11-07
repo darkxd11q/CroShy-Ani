@@ -47,6 +47,19 @@ async function remove(tokenHash) {
   if (error) throw error;
 }
 
+// Belirteç döndürülürken eskisini hemen silmek yerine kısa bir süre (ms) daha geçerli bırakır:
+// aynı anda gelen paralel istekler başarısız olup kullanıcıyı çıkış yapmış göstermesin.
+async function expireSoon(tokenHash, ms) {
+  const limit = Date.now() + ms;
+  const { error } = await supabase.from('remember_tokens').update({ expires_at: limit }).eq('token_hash', tokenHash).gt('expires_at', limit);
+  if (error) throw error;
+}
+
+async function purgeExpired() {
+  const { error } = await supabase.from('remember_tokens').delete().lt('expires_at', Date.now());
+  if (error) throw error;
+}
+
 // Bir kullanıcının/adminin tüm cihazlardaki "beni hatırla" token'larını
 // iptal eder (örn. şifre değişince kullanılabilir — şu an çağrılmıyor ama
 // ileride kullanılabilir diye hazır).
@@ -59,4 +72,4 @@ async function removeAllForSubject(subjectType, subjectId) {
   if (error) throw error;
 }
 
-module.exports = { create, findValid, remove, removeAllForSubject };
+module.exports = { create, findValid, remove, removeAllForSubject, expireSoon, purgeExpired };

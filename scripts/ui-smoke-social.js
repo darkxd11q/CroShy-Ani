@@ -79,8 +79,18 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
   };
 
   let n = await mkNav({ loggedIn: true, isAdmin: false, username: 'ayse' });
-  const names = [...n.doc.querySelectorAll('.nav-cluster > *')].map((e) => e.textContent.trim());
-  check('[menü] üye menüsü: Anı Ekle, Kod, çan, profil(ayse), Çıkış', names.length === 5 && /Anı Ekle/.test(names[0]) && /Kod/.test(names[1]) && /🔔/.test(names[2]) && /ayse/.test(names[3]) && /Çıkış/.test(names[4]), names.join(' | '));
+  const kids = [...n.doc.querySelectorAll('.nav-cluster > *')];
+  check('[menü] üye menüsü SADE: çan, Anı Ekle, tek hesap menüsü (3 öğe)', kids.length === 3 && /🔔/.test(kids[0].textContent) && /Anı Ekle/.test(kids[1].textContent) && kids[2].classList.contains('nav-menu'), kids.map((e) => e.textContent.trim()).join(' | '));
+  const menuBtn = n.doc.querySelector('.nav-menu-btn'); const menuPanel = n.doc.querySelector('.nav-menu-panel');
+  check('[menü] hesap menüsü başta kapalı, düğme ayse yazıyor', menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'false' && /ayse/.test(menuBtn.textContent));
+  menuBtn.click();
+  const mi = [...menuPanel.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent.trim());
+  check('[menü] tek tuşla açıldı: Profilim, Herkese açık profilim, Kod, Çıkış', !menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'true' && mi.length === 4 && /Profilim/.test(mi[0]) && /Herkese açık/.test(mi[1]) && /Kod/.test(mi[2]) && /Çıkış/.test(mi[3]), mi.join(' | '));
+  check('[menü] bağlantılar doğru: /profile, /u/ayse, /redeem, POST /logout', menuPanel.querySelector('a[href="/profile"]') && menuPanel.querySelector('a[href="/u/ayse"]') && menuPanel.querySelector('a[href="/redeem"]') && menuPanel.querySelector('form[action="/logout"][method="post"]'));
+  n.doc.dispatchEvent(new n.win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  check('[menü] Esc ile kapandı', menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'false');
+  menuBtn.click(); n.doc.body.click();
+  check('[menü] dışarı tıklayınca kapandı', menuPanel.hidden);
   const badge = n.doc.querySelector('.bell-badge');
   check('[çan] okunmamış sayısı 3 görünüyor', !badge.hidden && badge.textContent === '3');
   n.doc.querySelector('.bell-btn').click(); await tick(8);

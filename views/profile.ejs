@@ -137,8 +137,10 @@
         <span>Rozetin sayesinde hiçbir dosya boyutu, video süresi ya da günlük gönderim sınırına takılmıyorsun.</span>
       </div>
     <% } else { %>
-      <div class="upload-card" style="margin-bottom: 20px;">
-        <h2 class="profile-section-title">📏 Yükleme Sınırların</h2>
+      <details class="acc" id="acc-sinirlar">
+      <summary class="acc-summary"><span>📏 Sınırlarım</span><span class="acc-hint">Dosya boyutu ve günlük hak</span></summary>
+      <div class="acc-body">
+
         <p class="profile-section-sub">
           <% if (hasCustomLimits) { %>Admin tarafından senin için özel olarak ayarlanmış.<% } else { %>Site genelindeki varsayılan sınırlar geçerli.<% } %>
         </p>
@@ -147,11 +149,15 @@
           <div class="profile-limit-item">🎬 Video: <strong><%= (limits.videoBytes / (1024*1024)).toFixed(1) %> MB</strong></div>
           <div class="profile-limit-item">⏱️ Video süresi: <strong><%= Math.floor(limits.videoDurationSec/60) %>:<%= String(limits.videoDurationSec%60).padStart(2,'0') %></strong></div>
         </div>
+      
       </div>
+    </details>
     <% } %>
 
-    <div class="upload-card" style="margin-bottom: 20px;">
-      <h2 class="profile-section-title">🖼️ Anıların (<%= items.length %>)</h2>
+    <details class="acc" id="acc-animlar" open>
+      <summary class="acc-summary"><span>🖼️ Anılarım (<%= items.length %>)</span><span class="acc-hint">Gönderdiklerin ve durumları</span></summary>
+      <div class="acc-body">
+
       <% if (items.length === 0) { %>
         <div class="empty-state">Henüz bir anı göndermedin.</div>
       <% } else { %>
@@ -174,10 +180,15 @@
           <% }) %>
         </div>
       <% } %>
-    </div>
+    
+      </div>
+    </details>
 
-    <div class="upload-card" style="margin-bottom: 20px;">
-      <h2 class="profile-section-title">🎨 Temalar</h2>
+    <details class="acc" id="acc-gorunum">
+      <summary class="acc-summary"><span>🎨 Görünüm</span><span class="acc-hint">Tema ve isim rengi</span></summary>
+      <div class="acc-body">
+
+      <h3 class="profile-section-title acc-sub">🎨 Temalar</h3>
       <% var THEME_OPTIONS = [
         { id: '', name: 'Varsayılan', kind: 'free', sw: ['#8b5cf6', '#ec4899', '#22d3ee'] },
         { id: 'ocean', name: 'Okyanus', kind: 'base', sw: ['#0ea5e9', '#06b6d4', '#5eead4'] },
@@ -208,25 +219,9 @@
           <a href="/redeem" class="btn small">🎟️ Kodum Var</a>
         </div>
       <% } %>
-    </div>
+    
 
-    <div class="upload-card" style="margin-bottom: 20px;">
-      <h2 class="profile-section-title">✏️ Kullanıcı Adı</h2>
-      <% var nc = locals.nameChange || { remaining: 2, nextAt: null }; %>
-      <p class="profile-section-sub">
-        14 günde en fazla 2 kez değiştirebilirsin.
-        <% if (nc.remaining > 0) { %>Kalan hakkın: <strong><%= nc.remaining %>/2</strong>
-        <% } else { %>Şu an hakkın yok — <strong><%= new Date(nc.nextAt).toLocaleString('tr-TR') %></strong> tarihinde yenilenir.<% } %>
-      </p>
-      <form method="POST" action="/profile/change-name" style="display:flex; gap:10px; flex-wrap:wrap;">
-        <input type="text" name="newUsername" minlength="3" maxlength="10" placeholder="Yeni kullanıcı adı" required <%= nc.remaining > 0 ? '' : 'disabled' %>
-               style="flex:1; min-width:160px; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
-        <button type="submit" class="btn primary small" <%= nc.remaining > 0 ? '' : 'disabled' %>>Değiştir</button>
-      </form>
-    </div>
-
-    <div class="upload-card" style="margin-bottom: 20px;">
-      <h2 class="profile-section-title">🌈 İsim Rengi</h2>
+      <h3 class="profile-section-title acc-sub">🌈 İsim Rengi</h3>
       <% if (locals.canStyleName) { %>
         <p class="profile-section-sub">Adını harf harf istediğin renge boyayabilir ya da hazır bir gradyan seçebilirsin.</p>
         <div id="nameStyleEditor" data-name="<%= username %>" data-style="<%= JSON.stringify(locals.nameStyle || null) %>">
@@ -250,27 +245,29 @@
           <a href="/redeem" class="btn small">🎟️ Kodum Var</a>
         </div>
       <% } %>
-    </div>
+    
+      </div>
+    </details>
 
-    <div class="upload-card" style="margin-bottom: 20px;">
-      <h2 class="profile-section-title">🛡️ Verilerim ve Hesabım</h2>
-      <p class="profile-section-sub">KVKK kapsamındaki haklarını buradan kullanabilirsin. <a href="/gizlilik" style="color:var(--accent-3);">Gizlilik metnini oku</a></p>
-      <a href="/profile/export" class="btn small" download>⬇️ Verilerimi indir (JSON)</a>
-      <details class="danger-zone">
-        <summary>🗑️ Hesabımı sil</summary>
-        <p class="profile-section-sub">Hesabın, tüm anıların (Cloudinary dahil), yorumların ve verilerin <strong>kalıcı olarak</strong> silinir. Bu işlem geri alınamaz.</p>
-        <form method="POST" action="/profile/delete-account" style="display:flex; flex-direction:column; gap:10px;">
-          <input type="password" name="password" placeholder="Şifren" autocomplete="current-password" required
-                 style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body);" />
-          <input type="text" name="confirm" placeholder="Onay için kullanıcı adını yaz: <%= username %>" autocomplete="off" required
-                 style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body);" />
-          <button type="submit" class="btn danger small" onclick="return confirm('Hesabın kalıcı olarak silinecek. Emin misin?');">Hesabımı kalıcı olarak sil</button>
-        </form>
-      </details>
-    </div>
+    <details class="acc" id="acc-hesap">
+      <summary class="acc-summary"><span>👤 Hesap</span><span class="acc-hint">Kullanıcı adı, şifre, verilerin</span></summary>
+      <div class="acc-body">
 
-    <div class="upload-card">
-      <h2 class="profile-section-title">🔒 Şifreni Değiştir</h2>
+      <h3 class="profile-section-title acc-sub">✏️ Kullanıcı Adı</h3>
+      <% var nc = locals.nameChange || { remaining: 2, nextAt: null }; %>
+      <p class="profile-section-sub">
+        14 günde en fazla 2 kez değiştirebilirsin.
+        <% if (nc.remaining > 0) { %>Kalan hakkın: <strong><%= nc.remaining %>/2</strong>
+        <% } else { %>Şu an hakkın yok — <strong><%= new Date(nc.nextAt).toLocaleString('tr-TR') %></strong> tarihinde yenilenir.<% } %>
+      </p>
+      <form method="POST" action="/profile/change-name" style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="text" name="newUsername" minlength="3" maxlength="10" placeholder="Yeni kullanıcı adı" required <%= nc.remaining > 0 ? '' : 'disabled' %>
+               style="flex:1; min-width:160px; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body); font-size:0.95rem;" />
+        <button type="submit" class="btn primary small" <%= nc.remaining > 0 ? '' : 'disabled' %>>Değiştir</button>
+      </form>
+    
+
+      <h3 class="profile-section-title acc-sub">🔒 Şifreni Değiştir</h3>
       <form method="POST" action="/profile/change-password">
         <div class="field">
           <label for="currentPassword">Mevcut şifre</label>
@@ -289,7 +286,25 @@
         </div>
         <button type="submit" class="btn primary" style="width:100%; justify-content:center;">Şifreyi Güncelle</button>
       </form>
-    </div>
+    
+
+      <h3 class="profile-section-title acc-sub">🛡️ Verilerim ve Hesabım</h3>
+      <p class="profile-section-sub">KVKK kapsamındaki haklarını buradan kullanabilirsin. <a href="/gizlilik" style="color:var(--accent-3);">Gizlilik metnini oku</a></p>
+      <a href="/profile/export" class="btn small" download>⬇️ Verilerimi indir (JSON)</a>
+      <details class="danger-zone">
+        <summary>🗑️ Hesabımı sil</summary>
+        <p class="profile-section-sub">Hesabın, tüm anıların (Cloudinary dahil), yorumların ve verilerin <strong>kalıcı olarak</strong> silinir. Bu işlem geri alınamaz.</p>
+        <form method="POST" action="/profile/delete-account" style="display:flex; flex-direction:column; gap:10px;">
+          <input type="password" name="password" placeholder="Şifren" autocomplete="current-password" required
+                 style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body);" />
+          <input type="text" name="confirm" placeholder="Onay için kullanıcı adını yaz: <%= username %>" autocomplete="off" required
+                 style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body);" />
+          <button type="submit" class="btn danger small" onclick="return confirm('Hesabın kalıcı olarak silinecek. Emin misin?');">Hesabımı kalıcı olarak sil</button>
+        </form>
+      </details>
+    
+      </div>
+    </details>
   </div>
 
   <footer class="site">CroShy Anı · Bu sayfa ileride daha da geliştirilecek<span class="footer-links"> · <a href="/gizlilik">Gizlilik</a> · <a href="/kosullar">Şartlar</a> · <a href="/cerezler">Çerezler</a></span></footer>
@@ -315,6 +330,7 @@
     </div>
   </div>
   <script>window.AVATAR_CFG = { canGif: <%= locals.canGif ? 'true' : 'false' %>, maxBytes: 5242880, maxGifBytes: 8388608 };</script>
+  <script src="/js/profile-accordion.js"></script>
   <script src="/js/name-style-editor.js"></script>
   <script src="/js/cloud-upload.js"></script>
   <script src="/js/avatar-editor.js"></script>

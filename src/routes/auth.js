@@ -274,3 +274,14 @@ app.get('/auth-card', (req, res) => {
   const tab = req.query.tab === 'register' ? 'register' : 'login';
   res.render('partials/auth-card', { tab, error: null, next: safeNext(req.query.next) || '' });
 });
+
+
+// "Giriş Yap"a basılınca önce sessizce denenir: "beni hatırla" çerezi 3 aydan eskiyse/yoksa
+// false döner (pencere açılır), geçerliyse oturum zaten otomatik açılmıştır (ara katman yapar).
+app.post(
+  '/api/quick-login',
+  asyncRoute(async (req, res) => {
+    const loggedIn = !!(req.session && (req.session.userId || req.session.isAdmin));
+    res.json({ ok: loggedIn, isAdmin: !!(req.session && req.session.isAdmin), username: (req.session && req.session.username) || null });
+  })
+);
