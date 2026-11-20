@@ -1,5 +1,6 @@
 // Giriş / kayıt / çıkış.
 const { adminGuard, adminLoginLimiter, app, asyncRoute, clearRememberCookie, crypto, hashPassword, isProd, issueRememberCookie, path, registerLimiter, requireSuperAdminApi, resolveNext, safeNext, safeStringEqual, session, syncThemeCookie, userGuard, userLoginLimiter, users, verifyHashedPassword, verifyPassword } = require('../core');
+const recovery = require('../../recovery');
 const admins = require('../../admins');
 const totp = require('../lib/totp');
 const { record: auditRecord } = require('../audit');
@@ -108,6 +109,14 @@ app.post(
       throw e;
     }
 
+    // Kayıtta 8 kurtarma kodu üretilir (tablo henüz yoksa kayıt yine de tamamlanır)
+    let recoveryCodes = null;
+    try {
+      recoveryCodes = await recovery.createSet(user.id);
+    } catch (e) {
+      console.error('Kurtarma kodları üretilemedi:', e.message);
+    }
+
     req.session.regenerate(async (err) => {
       try {
         if (err) return res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });
@@ -118,7 +127,13 @@ app.post(
           issueRememberCookie(res, { subjectType: 'user', subjectId: user.id, username: user.username });
         }
         await syncThemeCookie(res, user, req);
-        res.redirect(resolveNext(req, res));
+        const nextUrl = resolveNext(req, res);
+        if (recoveryCodes) {
+          req.session.recoveryCodes = recoveryCodes;
+          req.session.recoveryNext = nextUrl;
+          return res.redirect('/recovery-codes');
+        }
+        res.redirect(nextUrl);
       } catch (e) {
         console.error('Kayıt sonrası hata:', e.message);
         if (!res.headersSent) res.render('register', { error: 'Bir hata oluştu, tekrar dene.' });

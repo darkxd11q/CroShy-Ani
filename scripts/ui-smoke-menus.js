@@ -68,7 +68,7 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
 
   // ================= ADMİN SEKMELERİ =================
   const baseA = {
-    pending: [{ id: 'p1', url: 'https://res.cloudinary.com/c/image/upload/a.jpg', type: 'image', uploaderName: 'x', caption: 'c', createdAt: Date.now() }], approvedCount: 1, approvedItems: [], deletedItems: [], deleteRetentionMs: 86400000,
+    pending: [{ id: 'p1', url: 'https://res.cloudinary.com/c/image/upload/a.jpg', type: 'image', uploaderName: 'x', caption: 'c', createdAt: Date.now() }], approvedCount: 1, approvedItems: [], approvedTotal: 1, deletedItems: [], deleteRetentionMs: 86400000,
     username: 'dxrks91', bans: [], customLimitUsers: [], settings: { dailySubmitLimit: 2, maxImageBytes: 1, maxVideoBytes: 1, maxVideoDurationSec: 150 }, badgeUsers: [],
     weeklyLeaderboard: { topSubmitters: [], topLiked: [] }, BADGE_INFO: { special: { label: 'ÖZEL', icon: '💜', className: 'badge-special' } }, BADGE_ORDER: ['special'], redeemCodeList: [],
     feedbackList: [{ id: 1, username: 'a', message: 'm', status: 'pending', createdAt: 1 }], bannedUsers: [], reportGroups: [{ itemId: 'i', commentId: null, count: 2, reasons: { spam: 2 }, details: [], firstAt: 1, item: { id: 'i', url: 'u', type: 'image', caption: 'c', uploaderName: 'm' }, comment: null, commentGone: false }],

@@ -250,7 +250,7 @@
     </details>
 
     <details class="acc" id="acc-hesap">
-      <summary class="acc-summary"><span>👤 Hesap</span><span class="acc-hint">Kullanıcı adı, şifre, verilerin</span></summary>
+      <summary class="acc-summary"><span>👤 Hesap</span><span class="acc-hint"><%= locals.recoveryUnused === 0 ? '⚠️ Kurtarma kodun yok' : 'Kullanıcı adı, şifre, kurtarma kodları, verilerin' %></span></summary>
       <div class="acc-body">
 
       <h3 class="profile-section-title acc-sub">✏️ Kullanıcı Adı</h3>
@@ -287,6 +287,19 @@
         <button type="submit" class="btn primary" style="width:100%; justify-content:center;">Şifreyi Güncelle</button>
       </form>
     
+
+      <h3 class="profile-section-title acc-sub">🔑 Kurtarma Kodları</h3>
+      <p class="profile-section-sub">
+        <% if (locals.recoveryUnused == null) { %>Kurtarma kodları şu an kullanılamıyor.
+        <% } else if (recoveryUnused === 0) { %><strong style="color:#fda4af;">Hiç kurtarma kodun yok.</strong> Şifreni unutursan hesabını kurtaramazsın — yeni bir set oluştur.
+        <% } else { %>Kullanılabilir kodun: <strong><%= recoveryUnused %></strong>. Şifreni unutursan bunlardan biriyle sıfırlayabilirsin.<% } %>
+        Yeni set oluşturunca <strong>eskileri geçersiz olur</strong>.
+      </p>
+      <form method="POST" action="/profile/recovery-codes/regenerate" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 8px;">
+        <input type="password" name="password" placeholder="Şifren (onay için)" autocomplete="current-password" required
+               style="flex:1; min-width:160px; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; color: var(--text); font-family: var(--font-body);" />
+        <button type="submit" class="btn small">Yeni kodlar oluştur</button>
+      </form>
 
       <h3 class="profile-section-title acc-sub">🛡️ Verilerim ve Hesabım</h3>
       <p class="profile-section-sub">KVKK kapsamındaki haklarını buradan kullanabilirsin. <a href="/gizlilik" style="color:var(--accent-3);">Gizlilik metnini oku</a></p>

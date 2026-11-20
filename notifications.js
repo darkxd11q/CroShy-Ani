@@ -48,4 +48,13 @@ async function deleteForUser(userId) {
   if (error) throw error;
 }
 
-module.exports = { create, list, unreadCount, markAllRead, deleteForUser };
+// Okunmuş bildirimler 60 gün, okunmamışlar 180 gün sonra silinir (tablo sonsuz büyümesin)
+async function purgeOld() {
+  const DAY = 24 * 60 * 60 * 1000;
+  const a = await supabase.from('notifications').delete().eq('read', true).lt('created_at', Date.now() - 60 * DAY);
+  if (a.error) throw a.error;
+  const b = await supabase.from('notifications').delete().lt('created_at', Date.now() - 180 * DAY);
+  if (b.error) throw b.error;
+}
+
+module.exports = { create, list, unreadCount, markAllRead, deleteForUser, purgeOld };

@@ -44,8 +44,20 @@ function verifyHashedPassword(inputPassword, storedHash) {
 // Her çağrı bağımsız bir Map ile kendi sayaçlarını tutan bir "guard"
 // döndürür — admin girişi, kullanıcı girişi ve kayıt formu birbirini
 // kilitlemesin diye ayrı ayrı örnekler kullanılır.
-function createLoginGuard({ maxAttempts = 5, windowMs = 15 * 60 * 1000, lockMs = 15 * 60 * 1000 } = {}) {
+const rateState = require('./rateState');
+
+function createLoginGuard({ name, maxAttempts = 5, windowMs = 15 * 60 * 1000, lockMs = 15 * 60 * 1000 } = {}) {
   const attempts = new Map(); // key -> { count, firstAttempt, lockedUntil }
+
+  // name verilirse sayaçlar veritabanında da tutulur: sunucu yeniden başlayınca kilitler/denemeler sıfırlanmaz
+  if (name) {
+    rateState
+      .loadAll(name)
+      .then((rows) => {
+        for (const r of rows) if (!attempts.has(r.key)) attempts.set(r.key, r.state);
+      })
+      .catch(() => {});
+  }
 
   function getLoginStatus(key) {
     const entry = attempts.get(key);
@@ -69,10 +81,12 @@ function createLoginGuard({ maxAttempts = 5, windowMs = 15 * 60 * 1000, lockMs =
       entry.lockedUntil = now + lockMs;
     }
     attempts.set(key, entry);
+    if (name) rateState.save(name, key, entry, Math.max(entry.lockedUntil || 0, entry.firstAttempt + windowMs));
   }
 
   function resetAttempts(key) {
     attempts.delete(key);
+    if (name) rateState.remove(name, key);
   }
 
   setInterval(() => {
@@ -88,8 +102,17 @@ function createLoginGuard({ maxAttempts = 5, windowMs = 15 * 60 * 1000, lockMs =
 }
 
 // ---------- Genel amaçlı istek sınırlayıcı (IP başına) ----------
-function createRateLimiter({ windowMs, max, message }) {
+function createRateLimiter({ name, windowMs, max, message }) {
   const hits = new Map();
+
+  if (name) {
+    rateState
+      .loadAll(name)
+      .then((rows) => {
+        for (const r of rows) if (!hits.has(r.key)) hits.set(r.key, r.state);
+      })
+      .catch(() => {});
+  }
 
   setInterval(() => {
     const now = Date.now();
@@ -108,6 +131,7 @@ function createRateLimiter({ windowMs, max, message }) {
     }
     entry.count += 1;
     hits.set(ip, entry);
+    if (name) rateState.save(name, ip, entry, entry.start + windowMs);
 
     if (entry.count > max) {
       return res.status(429).json({

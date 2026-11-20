@@ -81,7 +81,7 @@ fetch('/api/me')
     const limitNote = me.hasCustomLimits ? ' · Senin için özel sınırlar tanımlı ✨' : '';
 
     if (remainingToday <= 0) {
-      quotaInfo.textContent = `Bugünkü gönderme hakkını kullandın (günde en fazla ${me.dailyLimit} anı). Yarın tekrar deneyebilirsin.`;
+      quotaInfo.textContent = `Bugünkü gönderme hakkını kullandın (günde en fazla ${me.dailyLimit} anı). Hakkın gece yarısı (Türkiye saati) yenilenir.`;
       submitBtn.disabled = true;
       submitBtn.textContent = 'Bugünlük hakkın doldu';
     } else if (me.unlimited) {
@@ -205,7 +205,7 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
   if (remainingToday !== null && remainingToday <= 0) {
-    showStatus('Bugünkü gönderme hakkını kullandın. Yarın tekrar deneyebilirsin.', 'err');
+    showStatus('Bugünkü gönderme hakkını kullandın. Hakkın gece yarısı (Türkiye saati) yenilenir.', 'err');
     return;
   }
   if (!selectedFile) {
@@ -340,7 +340,7 @@ form.addEventListener('submit', async (e) => {
     if (typeof remainingToday === 'number' && !(myLimits && myLimits.unlimited)) {
       remainingToday -= 1;
       if (remainingToday <= 0) {
-        quotaInfo.textContent = 'Bugünkü gönderme hakkını kullandın. Yarın tekrar deneyebilirsin.';
+        quotaInfo.textContent = 'Bugünkü gönderme hakkını kullandın. Hakkın gece yarısı (Türkiye saati) yenilenir.';
         submitBtn.textContent = 'Bugünlük hakkın doldu';
         submitBtn.disabled = true;
         return;

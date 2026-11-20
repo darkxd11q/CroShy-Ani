@@ -1,4 +1,5 @@
 const supabase = require('./supabaseClient');
+const { fetchAll } = require('./pager');
 
 function fromRow(r) {
   return {
@@ -73,24 +74,15 @@ async function deleteForUser(userId) {
 
 // [from, to) aralığında onaylı anıları üzerinden haftanın kazananlarını hesaplar.
 async function computeWinners(from, to) {
-  const [itemsRes, likesRes] = await Promise.all([
-    supabase
-      .from('items')
-      .select('id, user_id, uploader_name')
-      .eq('status', 'approved')
-      .is('deleted_at', null)
-      .gte('created_at', from)
-      .lt('created_at', to),
-    supabase.from('likes').select('item_id'),
+  const [items, likeMap] = await Promise.all([
+    fetchAll(supabase, 'items', 'id, user_id, uploader_name', (q) =>
+      q.eq('status', 'approved').is('deleted_at', null).gte('created_at', from).lt('created_at', to).order('id')
+    ),
+    require('./likes').getAllCounts(),
   ]);
-  if (itemsRes.error) throw itemsRes.error;
-  if (likesRes.error) throw likesRes.error;
-
-  const likeMap = {};
-  for (const row of likesRes.data || []) likeMap[row.item_id] = (likeMap[row.item_id] || 0) + 1;
 
   const byUser = new Map();
-  for (const item of itemsRes.data || []) {
+  for (const item of items) {
     if (!item.user_id) continue;
     if (!byUser.has(item.user_id)) {
       byUser.set(item.user_id, { userId: item.user_id, username: item.uploader_name, submissions: 0, likes: 0 });
@@ -100,14 +92,11 @@ async function computeWinners(from, to) {
     u.likes += likeMap[item.id] || 0;
   }
 
+  // Beraberlikte SQL (pg_cron) ile aynı sonucu versin diye kullanıcı kimliğiyle sıralanır
   const all = [...byUser.values()];
   const best = (cmp) => (all.length ? [...all].sort(cmp)[0] : null);
-  const topSubmitter = best(
-    (a, b) => b.submissions - a.submissions || b.likes - a.likes || a.username.localeCompare(b.username)
-  );
-  let topLiked = best(
-    (a, b) => b.likes - a.likes || b.submissions - a.submissions || a.username.localeCompare(b.username)
-  );
+  const topSubmitter = best((a, b) => b.submissions - a.submissions || b.likes - a.likes || a.userId.localeCompare(b.userId));
+  let topLiked = best((a, b) => b.likes - a.likes || b.submissions - a.submissions || a.userId.localeCompare(b.userId));
   if (topLiked && topLiked.likes < 1) topLiked = null;
 
   return { topSubmitter, topLiked };

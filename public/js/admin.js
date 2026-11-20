@@ -712,3 +712,99 @@ document.querySelectorAll('[data-report-action]').forEach((btn) => {
     });
   }
 })();
+
+
+// ---------- Onaylı anılar: arama + "daha fazla" (sayfalı) ----------
+(function () {
+  const list = document.getElementById('approved-list');
+  const search = document.getElementById('approvedSearch');
+  const more = document.getElementById('approvedMore');
+  if (!list || !search || !more) return;
+
+  const LIMIT = 40;
+  let q = '';
+  let offset = list.querySelectorAll('[data-id-row]').length;
+  let hasMore = offset >= LIMIT;
+  let seq = 0;
+  more.hidden = !hasMore;
+
+  function card(it) {
+    const c = document.createElement('div');
+    c.className = 'profile-item-card';
+    c.dataset.idRow = it.id;
+    let media;
+    if (it.type === 'video') {
+      media = document.createElement('video');
+      media.src = it.url + '#t=0.1';
+      media.preload = 'metadata';
+      media.muted = true;
+      media.playsInline = true;
+    } else {
+      media = document.createElement('img');
+      media.src = it.url;
+      media.alt = '';
+      media.loading = 'lazy';
+    }
+    const who = document.createElement('span');
+    who.className = 'profile-item-status is-approved';
+    who.textContent = it.uploaderName;
+    const likes = document.createElement('span');
+    likes.className = 'profile-item-likes';
+    likes.textContent = '❤️ ' + it.likes;
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'profile-item-delete';
+    del.setAttribute('aria-label', 'Sil');
+    del.title = 'Bu anıyı kaldır';
+    del.textContent = '✕';
+    del.addEventListener('click', async () => {
+      if (!confirm('Bu anı yayından kaldırılsın mı? (24 saat içinde "Son Silinenler"den geri alabilirsin)')) return;
+      const reason = prompt('Kaldırma nedeni (kullanıcıya bildirim olarak gösterilir; boş bırakabilirsin):', '');
+      if (reason === null) return;
+      del.disabled = true;
+      try {
+        await adminFetch('/api/admin/delete-approved/' + it.id, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason.trim() }),
+        });
+        c.remove();
+      } catch (err) {
+        alert('Hata: ' + err.message);
+        del.disabled = false;
+      }
+    });
+    c.append(media, who, likes, del);
+    return c;
+  }
+
+  async function load(reset) {
+    const my = ++seq;
+    if (reset) {
+      offset = 0;
+      list.textContent = '';
+    }
+    const data = await adminFetch('/api/admin/approved?offset=' + offset + '&limit=' + LIMIT + '&q=' + encodeURIComponent(q));
+    if (my !== seq) return;
+    data.items.forEach((it) => list.appendChild(card(it)));
+    offset = data.nextOffset;
+    hasMore = data.hasMore;
+    more.hidden = !hasMore;
+    if (reset && data.items.length === 0) {
+      const e = document.createElement('div');
+      e.className = 'empty-state';
+      e.textContent = q ? 'Eşleşen anı yok' : 'Henüz onaylı bir anı yok';
+      list.appendChild(e);
+    }
+  }
+
+  let timer = null;
+  search.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      q = search.value.trim();
+      load(true).catch((e) => alert('Hata: ' + e.message));
+    }, 300);
+  });
+  more.addEventListener('click', () => load(false).catch((e) => alert('Hata: ' + e.message)));
+})();

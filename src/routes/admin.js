@@ -4,7 +4,7 @@ const coreAll = require('../core');
 const supabase_sb = require('../../supabaseClient');
 async function supabase_cleanup(userId) {
   // yorumlar, tepkiler, bildirimler: hesapla birlikte silinir
-  for (const t of ['comments', 'reactions', 'notifications']) {
+  for (const t of ['comments', 'reactions', 'notifications', 'recovery_codes']) {
     try {
       await supabase_sb.from(t).delete().eq('user_id', userId);
     } catch (e) {
@@ -55,8 +55,8 @@ app.get(
       isSuperAdmin ? getSettingsSafe() : Promise.resolve(FALLBACK_SETTINGS),
       isSuperAdmin ? users.listUsersWithBadges() : Promise.resolve([]),
       isSuperAdmin ? users.getWeeklyLeaderboard(latestAwardTime(Date.now())) : Promise.resolve({ topSubmitters: [], topLiked: [] }),
-      isSuperAdmin ? db.getApprovedItems() : Promise.resolve([]),
-      isSuperAdmin ? likes.getAllCounts() : Promise.resolve({}),
+      isSuperAdmin ? db.listApprovedPage({ offset: 0, limit: 40 }) : Promise.resolve({ items: [], total: 0 }),
+      Promise.resolve({}),
       isSuperAdmin ? db.getDeletedItems() : Promise.resolve([]),
       isSuperAdmin ? redeemCodes.listRecent(25) : Promise.resolve([]),
       isSuperAdmin ? feedback.listForAdmin(60).catch(() => []) : Promise.resolve([]),
@@ -67,14 +67,16 @@ app.get(
       req.session.adminId ? adminsDb.findById(req.session.adminId).catch(() => null) : Promise.resolve(null),
     ]);
 
-    const approvedItems = approvedRaw
-      .map((i) => ({ ...i, likes: likeCounts[i.id] || 0 }))
-      .sort((a, b) => b.createdAt - a.createdAt);
+    // Yalnızca son 40 onaylı anı çizilir (hepsi değil); gerisi arama / "daha fazla" ile gelir
+    const pageLikes = isSuperAdmin ? await likes.countsForItemIds(approvedRaw.items.map((i) => i.id)).catch(() => ({})) : {};
+    const approvedItems = approvedRaw.items.map((i) => ({ ...i, likes: pageLikes[i.id] || 0 }));
+    const approvedTotal = approvedRaw.total;
 
     res.render('admin', {
       pending,
       approvedCount,
       approvedItems,
+      approvedTotal,
       deletedItems,
       redeemCodeList,
       feedbackList,
@@ -473,5 +475,24 @@ app.post(
     await users.updatePasswordHash(target.id, coreAll.hashPassword(tempPassword));
     await coreAll.rememberTokens.removeAllForSubject('user', target.id).catch(() => {});
     res.json({ ok: true, username: target.username, tempPassword });
+  })
+);
+
+
+// Onaylı anılar: sayfalı + aranabilir (admin panelindeki liste büyüdükçe yavaşlamasın)
+app.get(
+  '/api/admin/approved',
+  requireSuperAdminApi,
+  asyncRoute(async (req, res) => {
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 40));
+    const { items, total } = await db.listApprovedPage({ offset, limit, q: req.query.q });
+    const counts = await likes.countsForItemIds(items.map((i) => i.id)).catch(() => ({}));
+    res.json({
+      items: items.map((i) => ({ id: i.id, url: i.url, type: i.type, uploaderName: i.uploaderName, likes: counts[i.id] || 0 })),
+      total,
+      nextOffset: offset + items.length,
+      hasMore: offset + items.length < total,
+    });
   })
 );

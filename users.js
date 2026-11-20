@@ -1,4 +1,5 @@
 const supabase = require('./supabaseClient');
+const { fetchAll } = require('./pager');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -107,13 +108,11 @@ function canStyleName(user) {
 // (Sütunlar henüz yoksa galeri bozulmasın diye hata yutulur.)
 async function getAllAvatars() {
   try {
-    const { data, error } = await supabase
-      .from('app_users')
-      .select('username, avatar_url, name_style, badges')
-      .or('avatar_url.not.is.null,name_style.not.is.null');
-    if (error) throw error;
+    const rows = await fetchAll(supabase, 'app_users', 'username, avatar_url, name_style, badges', (q) =>
+      q.or('avatar_url.not.is.null,name_style.not.is.null').order('id')
+    );
     const map = {};
-    for (const row of data || []) {
+    for (const row of rows) {
       const user = { badges: Array.isArray(row.badges) ? row.badges : [] };
       map[row.username] = {
         avatarUrl: row.avatar_url || null,
@@ -275,12 +274,10 @@ async function clearCustomLimits(username) {
 }
 
 async function listUsersWithCustomLimits() {
-  const { data, error } = await supabase
-    .from('app_users')
-    .select('*')
-    .or('custom_image_bytes.not.is.null,custom_video_bytes.not.is.null,custom_video_duration_sec.not.is.null');
-  if (error) throw error;
-  return (data || []).map(fromRow);
+  const rows = await fetchAll(supabase, 'app_users', '*', (q) =>
+    q.or('custom_image_bytes.not.is.null,custom_video_bytes.not.is.null,custom_video_duration_sec.not.is.null').order('id')
+  );
+  return rows.map(fromRow);
 }
 
 // ---------- Rozetler ----------
@@ -352,11 +349,10 @@ async function listBanned() {
 // Süresi dolan rozetleri veritabanından da temizler; kimlerin ne kaybettiğini döndürür
 // (çağıran taraf onlara bildirim gönderir).
 async function purgeExpiredBadges() {
-  const { data, error } = await supabase.from('app_users').select('id, username, badges, badge_expiry');
-  if (error) throw error;
+  const rows = await fetchAll(supabase, 'app_users', 'id, username, badges, badge_expiry', (q) => q.order('id'));
   const now = Date.now();
   const removed = [];
-  for (const row of data || []) {
+  for (const row of rows) {
     const expiry = row.badge_expiry && typeof row.badge_expiry === 'object' ? row.badge_expiry : {};
     const gone = Object.keys(expiry).filter((b) => Number(expiry[b]) < now);
     if (gone.length === 0) continue;
@@ -371,12 +367,9 @@ async function purgeExpiredBadges() {
 }
 
 async function listUsersWithBadges() {
-  // Küçük ölçekli bir site için tüm kullanıcıları çekip JS tarafında
-  // filtrelemek, jsonb dizisi üzerinde kırılgan bir PostgREST filtresi
-  // kurmaya çalışmaktan daha güvenilir.
-  const { data, error } = await supabase.from('app_users').select('*');
-  if (error) throw error;
-  return (data || []).map(fromRow).filter((u) => u.badges.length > 0);
+  // Tüm kullanıcılar sayfa sayfa çekilir; rozet filtresi JS tarafında (jsonb filtresi kırılgan olurdu)
+  const rows = await fetchAll(supabase, 'app_users', '*', (q) => q.order('id'));
+  return rows.map(fromRow).filter((u) => u.badges.length > 0);
 }
 
 // Bu haftaki (son 7 gün) en çok anı gönderen ve en çok beğeni toplayan
@@ -385,38 +378,17 @@ async function listUsersWithBadges() {
 async function getWeeklyLeaderboard(since) {
   const cutoff = since || Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-  // İki sorgu birbirine bağımlı değilmiş gibi PARALEL çalıştırılıyor (tüm
-  // beğenileri çekip eşleştirmeyi JS tarafında yapıyoruz) — art arda iki ağ
-  // isteği yerine tek bir bekleme süresi, admin panelini belirgin hızlandırır.
-  const [itemsRes, likesRes] = await Promise.all([
-    supabase
-      .from('items')
-      .select('id, uploader_name, status, created_at')
-      .eq('status', 'approved') // bekleyen/reddedilen anılar sayılmaz
-      .is('deleted_at', null)
-      .gt('created_at', cutoff),
-    supabase.from('likes').select('item_id'),
+  // Yalnızca ONAYLI (ve silinmemiş) anılar sayılır; beğeni sayıları özet görünümden gelir
+  const [items, likeMap] = await Promise.all([
+    fetchAll(supabase, 'items', 'id, uploader_name', (q) => q.eq('status', 'approved').is('deleted_at', null).gt('created_at', cutoff).order('id')),
+    require('./likes').getAllCounts(),
   ]);
-  if (itemsRes.error) throw itemsRes.error;
-  if (likesRes.error) throw likesRes.error;
-
-  const items = itemsRes.data || [];
-  const likeRows = likesRes.data || [];
 
   const submissionCounts = {};
-  for (const item of items) {
-    submissionCounts[item.uploader_name] = (submissionCounts[item.uploader_name] || 0) + 1;
-  }
-
-  const likesByItem = {};
-  for (const row of likeRows) {
-    likesByItem[row.item_id] = (likesByItem[row.item_id] || 0) + 1;
-  }
   const likeCounts = {};
   for (const item of items) {
-    if (item.status !== 'approved') continue;
-    const n = likesByItem[item.id] || 0;
-    likeCounts[item.uploader_name] = (likeCounts[item.uploader_name] || 0) + n;
+    submissionCounts[item.uploader_name] = (submissionCounts[item.uploader_name] || 0) + 1;
+    likeCounts[item.uploader_name] = (likeCounts[item.uploader_name] || 0) + (likeMap[item.id] || 0);
   }
 
   const toSortedArray = (obj) =>
@@ -425,10 +397,7 @@ async function getWeeklyLeaderboard(since) {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-  return {
-    topSubmitters: toSortedArray(submissionCounts),
-    topLiked: toSortedArray(likeCounts),
-  };
+  return { topSubmitters: toSortedArray(submissionCounts), topLiked: toSortedArray(likeCounts) };
 }
 
 module.exports = {

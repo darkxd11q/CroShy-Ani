@@ -1,4 +1,5 @@
 const supabase = require('./supabaseClient');
+const { fetchAll } = require('./pager');
 
 // Yorum/tepki veri katmanı
 const EMOJIS = ['😂', '😮', '😢', '🔥', '👏', '🎉'];
@@ -41,10 +42,14 @@ async function deleteComment(id) {
 
 // Galeri kartlarındaki "💬 3" sayıları için (tüm anılar; küçük tablo)
 async function commentCountsAll() {
-  const { data, error } = await supabase.from('comments').select('item_id');
-  if (error) throw error;
   const out = {};
-  for (const r of data || []) out[r.item_id] = (out[r.item_id] || 0) + 1;
+  try {
+    const rows = await fetchAll(supabase, 'comment_counts', 'item_id, cnt', (q) => q.order('item_id'));
+    for (const r of rows) out[r.item_id] = Number(r.cnt);
+  } catch (e) {
+    const rows = await fetchAll(supabase, 'comments', 'item_id', (q) => q.order('id'));
+    for (const r of rows) out[r.item_id] = (out[r.item_id] || 0) + 1;
+  }
   return out;
 }
 

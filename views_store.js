@@ -1,10 +1,10 @@
 const supabase = require('./supabaseClient');
+const { fetchAll } = require('./pager');
 
 // Bir IP'nin daha önce gördüğü anı id'lerinin kümesi
 async function getSeenSetForIp(ip) {
-  const { data, error } = await supabase.from('media_views').select('item_id').eq('ip', ip);
-  if (error) throw error;
-  return new Set((data || []).map((r) => r.item_id));
+  const rows = await fetchAll(supabase, 'media_views', 'item_id', (q) => q.eq('ip', ip).order('item_id'));
+  return new Set(rows.map((r) => r.item_id));
 }
 
 // Bir grup anıyı bu IP için "görüldü" olarak işaretle (var olanları yok sayar)

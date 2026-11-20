@@ -14,7 +14,7 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
 (async () => {
   // ================= ADMIN PANELİ =================
   const base = {
-    pending: [], approvedCount: 0, approvedItems: [], deletedItems: [], deleteRetentionMs: 86400000, username: 'dxrks91', adminRole: 'superadmin',
+    pending: [], approvedCount: 0, approvedItems: [], approvedTotal: 0, deletedItems: [], deleteRetentionMs: 86400000, username: 'dxrks91', adminRole: 'superadmin',
     bans: [], customLimitUsers: [], settings: { dailySubmitLimit: 2, maxImageBytes: 1, maxVideoBytes: 1, maxVideoDurationSec: 150 }, badgeUsers: [],
     weeklyLeaderboard: { topSubmitters: [], topLiked: [] }, BADGE_INFO: { special: { label: 'ÖZEL', icon: '💜', className: 'badge-special' } }, BADGE_ORDER: ['special'],
     redeemCodeList: [], feedbackList: [], bannedUsers: [],
@@ -110,6 +110,33 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
   $2('[data-report-comment]').click(); $2('#reportReason').value = 'taciz'; dup = true; $2('#reportSend').click(); await tick();
   check('[şikayet] yorum şikayeti /api/comments/1/report adresine gitti', calls2.some((c) => c.url === '/api/comments/1/report' && c.body.reason === 'taciz'));
   check('[şikayet] tekrar şikayette "zaten şikayet etmiştin" mesajı', /zaten/.test($2('#reportStatus').textContent));
+
+  // ================= ONAYLI ANILAR: ARAMA + "DAHA FAZLA" =================
+  {
+    confirmAnswer = true; // önceki bölümde "hayır" bırakılmıştı
+    const mk = (n, from) => Array.from({ length: n }, (_, i) => ({ id: 'a' + (from + i), url: 'https://res.cloudinary.com/c/image/upload/' + (from + i) + '.jpg', type: 'image', uploaderName: 'kisi' + (from + i), likes: i }));
+    let reply = { items: mk(40, 0), total: 85, nextOffset: 40, hasMore: true };
+    const prevFetch = w.fetch;
+    w.fetch = async (url, opts = {}) => {
+      if (String(url).startsWith('/api/admin/approved')) { calls.push({ url: String(url), method: 'GET', body: null }); return resp(200, reply); }
+      return prevFetch(url, opts);
+    };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const cards = () => w.document.querySelectorAll('#approved-list .profile-item-card').length;
+    const search = w.document.getElementById('approvedSearch'); const more = w.document.getElementById('approvedMore');
+    check('[onaylı] arama kutusu ve "daha fazla" düğmesi var', !!search && !!more && more.hidden === true);
+    search.value = 'kisi'; search.dispatchEvent(new w.Event('input')); await sleep(450); await tick();
+    check('[onaylı] arama: q=kisi ile offset=0 istendi, 40 kart çizildi', /offset=0&limit=40&q=kisi/.test(calls[calls.length - 1].url) && cards() === 40, calls[calls.length - 1].url + ' | ' + cards());
+    check('[onaylı] daha fazla sonuç varken düğme görünür', more.hidden === false);
+    reply = { items: mk(40, 40), total: 85, nextOffset: 80, hasMore: true }; more.click(); await tick();
+    check('[onaylı] "daha fazla": offset=40 istendi, 80 kart (mevcutların üstüne eklendi)', /offset=40/.test(calls[calls.length - 1].url) && cards() === 80);
+    reply = { items: mk(5, 80), total: 85, nextOffset: 85, hasMore: false }; more.click(); await tick();
+    check('[onaylı] son sayfada 85 kart ve düğme gizlendi', cards() === 85 && more.hidden === true);
+    const firstDel = w.document.querySelector('#approved-list .profile-item-delete'); firstDel.click(); await tick();
+    check('[onaylı] yeni çizilen karttan silme çalışır (sebep sorulur, istek gider, kart kalkar)', calls.some((c) => c.url === '/api/admin/delete-approved/a0' && c.method === 'POST') && cards() === 84);
+    reply = { items: [], total: 0, nextOffset: 0, hasMore: false }; search.value = 'zzz'; search.dispatchEvent(new w.Event('input')); await sleep(450); await tick();
+    check('[onaylı] eşleşme yoksa "Eşleşen anı yok" yazar', /Eşleşen anı yok/.test(w.document.getElementById('approved-list').textContent) && cards() === 0);
+  }
 
   const ok = results.every(Boolean);
   console.log('\n' + (ok ? 'ADMIN + ŞİKAYET ARAYÜZ KONTROLLERİ GEÇTİ ✅' : 'BAŞARISIZ KONTROLLER VAR ❌') + ` (${results.filter(Boolean).length}/${results.length})`);

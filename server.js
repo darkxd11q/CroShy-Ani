@@ -21,4 +21,13 @@ async function main() {
   });
 }
 
+// Kapanırken (yeniden dağıtım / uyku) bekleyen sayaçları veritabanına yaz
+process.on('SIGTERM', async () => {
+  try {
+    await require('./rateState').flush();
+  } finally {
+    process.exit(0);
+  }
+});
+
 main();

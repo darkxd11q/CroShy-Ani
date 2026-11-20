@@ -13,6 +13,7 @@ require('./routes/social');
 require('./routes/notifications');
 require('./routes/legal');
 require('./routes/reports');
+require('./routes/recovery');
 require('./routes/admin_accounts');
 require('./routes/notfound');
 

@@ -44,6 +44,8 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
 - Beğeniler ve günlük paylaşım hakları **hesaba** bağlıdır (ortak internet bağlantısı kullanan arkadaşlar birbirini etkilemez)
 - KVKK: gizlilik, kullanım şartları ve çerez sayfaları; profilinden verilerini indirebilir ya da hesabını kalıcı silebilirsin
 - Uygunsuz içerikler için **şikayet et** düğmesi (anı ve yorumlar)
+- E-posta olmadan **kurtarma kodlarıyla** şifre sıfırlama (kayıtta 8 tek kullanımlık kod verilir)
+- Günlük paylaşım hakkı her gece yarısı (Türkiye saati) yenilenir
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**

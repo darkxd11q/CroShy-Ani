@@ -73,3 +73,9 @@ test('admin paneli çökmeden yanıt verir (veritabanı yoksa 500, sunucu ayakta
   assert.ok([200, 500].includes(r.status));
   assert.equal((await fetch(base + '/')).status, 200);
 });
+
+test('moderatör onaylı anılar API\'sine erişemez (403)', async () => {
+  const { cookie } = await login('testmod', 'testpass');
+  const r = await fetch(base + '/api/admin/approved', { headers: { Cookie: cookie } });
+  assert.equal(r.status, 403);
+});

@@ -1,6 +1,7 @@
 // Anılar: liste, beğeni, gönderme.
 const { ABSOLUTE_VIDEO_CEILING_BYTES, SAFE_CLOUD_URL, app, asyncRoute, bans, cloudinary, crypto, db, effectiveLimitsFor, formatDuration, getSettingsSafe, likes, logs, requireUserApi, users, viewsStore } = require('../core');
 const { notify } = require('../notify');
+const { nextMidnightTR } = require('../lib/time');
 const { getSnapshot, invalidateSnapshot, createBrowse, getBrowse, seenKeyFor } = require('../snapshot');
 const { extractTags } = require('../lib/richtext');
 
@@ -125,6 +126,7 @@ app.get(
       premiumRole: user && user.badges.includes('special') ? 'special' : user && user.badges.includes('plus') ? 'plus' : null,
       username: (user && user.username) || req.session.username,
       dailyLimit: limits.dailyLimit,
+      resetAt: nextMidnightTR(), // hak, gece yarısı (Türkiye saati) yenilenir
       usedToday: used,
       remainingToday: Math.max(0, limits.dailyLimit - used),
       maxImageBytes: limits.imageBytes,

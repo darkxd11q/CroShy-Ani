@@ -32,6 +32,7 @@ async function deleteAccountPermanently(user) {
   await safe(() => supabase.from('comments').delete().eq('user_id', user.id));
   await safe(() => supabase.from('reactions').delete().eq('user_id', user.id));
   await safe(() => supabase.from('notifications').delete().eq('user_id', user.id));
+  await safe(() => supabase.from('recovery_codes').delete().eq('user_id', user.id));
   await safe(() => supabase.from('feedback').delete().eq('user_id', user.id));
   await safe(() => supabase.from('weekly_awards').delete().eq('user_id', user.id));
   await safe(() => supabase.from('likes').delete().eq('ip', 'u:' + user.id));

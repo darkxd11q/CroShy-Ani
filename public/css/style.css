@@ -1725,3 +1725,12 @@ a.notif-item:hover { background: rgba(255,255,255,.05); }
 .admin-tab[aria-selected="true"] { color: #fff; border-color: transparent; background: linear-gradient(120deg, var(--accent-1), var(--accent-2)); }
 .admin-tab .tab-count { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: .7rem; background: #ef4444; color: #fff; }
 .admin-sec[hidden] { display: none; }
+
+
+/* ==================== Kurtarma kodları ==================== */
+.recovery-warn { margin: 12px 0; padding: 10px 14px; border-radius: 12px; font-size: .86rem; color: #fde68a; background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.3); }
+.recovery-list { list-style: none; counter-reset: rc; margin: 14px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.recovery-list li { counter-increment: rc; padding: 10px 12px; border-radius: 12px; background: rgba(0,0,0,.35); border: 1px dashed rgba(255,255,255,.2); }
+.recovery-list li::before { content: counter(rc) '. '; color: var(--text-dim); font-size: .8rem; }
+.recovery-list code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; letter-spacing: .06em; font-size: 1rem; }
+.recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -9,6 +9,8 @@ const users = require('../users');
 const { notify } = require('./notify');
 const { purgeOrphanUploads } = require('./orphans');
 const audit = require('./audit');
+const rateState = require('../rateState');
+const notificationsDb = require('../notifications');
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -50,6 +52,8 @@ function startJobs() {
   every(24 * 60 * 60 * 1000, purgeOrphanUploads, 5 * 60 * 1000);
   every(24 * 60 * 60 * 1000, () => audit.purgeOld(180 * 24 * 60 * 60 * 1000).catch((e) => console.error('İşlem kaydı temizliği:', e.message)), 3 * 60 * 1000);
   every(60 * 60 * 1000, () => require('../rememberTokens').purgeExpired().catch((e) => console.error('Belirteç temizliği:', e.message)), 150 * 1000);
+  every(24 * 60 * 60 * 1000, () => notificationsDb.purgeOld().catch((e) => console.error('Bildirim temizliği:', e.message)), 4 * 60 * 1000);
+  every(60 * 60 * 1000, () => rateState.purgeExpired(), 200 * 1000);
   // <JOBS>
 }
 

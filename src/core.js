@@ -269,9 +269,9 @@ async function clearRememberCookie(req, res) {
 }
 
 // Her giriş/kayıt formu kendi bağımsız brute-force sayaçlarını kullanır
-const adminGuard = createLoginGuard();
-const userGuard = createLoginGuard();
-const redeemGuard = createLoginGuard({ maxAttempts: 6 });
+const adminGuard = createLoginGuard({ name: 'adminGuard' });
+const userGuard = createLoginGuard({ name: 'userGuard' });
+const redeemGuard = createLoginGuard({ name: 'redeemGuard', maxAttempts: 6 });
 
 // Tema HESABA aittir, cihaza değil: her sayfa gezinmesinde tema çerezi, o anda
 // oturum açmış hesabın temasıyla eşitlenir. Başka bir hesaba geçildiğinde, çıkış
@@ -281,16 +281,19 @@ const redeemGuard = createLoginGuard({ maxAttempts: 6 });
 const STATIC_EXT = /\.(css|js|png|jpe?g|gif|svg|ico|webp|woff2?|map|txt|json)$/i;
 
 const adminLoginLimiter = createRateLimiter({
+  name: 'adminLoginLimiter',
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: 'Çok fazla giriş denemesi yapıldı. Lütfen biraz sonra tekrar dene.',
 });
 const userLoginLimiter = createRateLimiter({
+  name: 'userLoginLimiter',
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: 'Çok fazla giriş denemesi yapıldı. Lütfen biraz sonra tekrar dene.',
 });
 const registerLimiter = createRateLimiter({
+  name: 'registerLimiter',
   windowMs: 60 * 60 * 1000,
   max: 8,
   message: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar dene.',
@@ -561,7 +564,11 @@ async function buildOwnProfileData(userId, username) {
   const totalLikes = approvedItems.reduce((sum, i) => sum + (likeCounts[i.id] || 0), 0);
   const limits = effectiveLimitsFor(user, globalSettings);
 
-  const [rewardExpiry, nameChange] = await Promise.all([awards.getRewardExpiry(userId), users.getNameChangeInfo(userId)]);
+  const [rewardExpiry, nameChange, recoveryUnused] = await Promise.all([
+    awards.getRewardExpiry(userId),
+    users.getNameChangeInfo(userId),
+    require('../recovery').countUnused(userId).catch(() => null),
+  ]);
   const allowedThemes = allowedThemesFor(user, rewardExpiry);
 
   const items = myItems.map((i) => ({ ...i, likes: likeCounts[i.id] || 0 }));
@@ -593,6 +600,7 @@ async function buildOwnProfileData(userId, username) {
       return t.length ? Math.max(...t) : null;
     })(),
     nameChange,
+    recoveryUnused,
     nameStyle: user ? user.nameStyle : null,
     canStyleName: canStyleName(user),
     hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),
@@ -608,6 +616,7 @@ async function buildOwnProfileData(userId, username) {
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 const AVATAR_GIF_MAX_BYTES = 8 * 1024 * 1024;
 const avatarLimiter = createRateLimiter({
+  name: 'avatarLimiter',
   windowMs: 60 * 60 * 1000,
   max: 12,
   message: 'Çok fazla profil fotoğrafı değişikliği yaptın. Lütfen daha sonra tekrar dene.',
@@ -619,6 +628,7 @@ function canUseGifAvatar(user) {
 
 // ---------- Geri bildirim ----------
 const feedbackLimiter = createRateLimiter({
+  name: 'feedbackLimiter',
   windowMs: 60 * 60 * 1000,
   max: 10,
   message: 'Çok fazla geri bildirim gönderdin. Lütfen daha sonra tekrar dene.',

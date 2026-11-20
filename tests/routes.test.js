@@ -103,3 +103,20 @@ test('yeni güvenlik/şikayet rotaları kayıtlı', () => {
     assert.ok(t.includes(r), 'eksik rota: ' + r);
   }
 });
+
+test('şifremi unuttum / kurtarma kodu uçları', async () => {
+  assert.equal((await fetch(base + '/forgot-password')).status, 200);
+  const post = (body) => fetch(base + '/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) });
+  let r = await post({ username: 'ayse', code: 'ABCDE-FGHJK', newPassword: '123', confirmPassword: '123' });
+  assert.equal(r.status, 200);
+  assert.match(await r.text(), /en az 6 karakter/);
+  r = await post({ username: 'ayse', code: 'ABCDE-FGHJK', newPassword: '123456', confirmPassword: '654321' });
+  assert.match(await r.text(), /eşleşmiyor/);
+  assert.equal((await fetch(base + '/recovery-codes', { redirect: 'manual' })).status, 302);
+  assert.equal((await fetch(base + '/profile/recovery-codes/regenerate', { method: 'POST', redirect: 'manual' })).status, 302);
+  assert.ok((await (await fetch(base + '/auth-card')).text()).includes('/forgot-password'), 'giriş kartında bağlantı yok');
+});
+
+test('admin onaylı anılar listesi giriş ister (401)', async () => {
+  assert.equal((await fetch(base + '/api/admin/approved')).status, 401);
+});

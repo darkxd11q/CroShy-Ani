@@ -1,4 +1,5 @@
 const supabase = require('./supabaseClient');
+const { fetchAll } = require('./pager');
 
 async function countLikes(itemId) {
   const { count, error } = await supabase
@@ -32,20 +33,39 @@ async function toggleLike(itemId, ip) {
 
 // Tüm öğeler için toplu beğeni sayısı haritası (N sorgu yerine tek okuma)
 async function getAllCounts() {
-  const { data, error } = await supabase.from('likes').select('item_id');
-  if (error) throw error;
   const map = {};
-  for (const row of data || []) {
-    map[row.item_id] = (map[row.item_id] || 0) + 1;
+  try {
+    // Özet görünüm: öğe başına tek satır (migration 006)
+    const rows = await fetchAll(supabase, 'like_counts', 'item_id, cnt', (q) => q.order('item_id'));
+    for (const r of rows) map[r.item_id] = Number(r.cnt);
+    return map;
+  } catch (e) {
+    // Görünüm henüz yoksa: tüm beğenileri sayfa sayfa sayarak yedekle
+    const rows = await fetchAll(supabase, 'likes', 'item_id', (q) => q.order('item_id').order('ip'));
+    for (const r of rows) map[r.item_id] = (map[r.item_id] || 0) + 1;
+    return map;
+  }
+}
+
+// Belirli öğeler için beğeni sayıları (sayfalı listeler / admin için)
+async function countsForItemIds(ids) {
+  const list = [...new Set(ids || [])];
+  const map = {};
+  if (list.length === 0) return map;
+  try {
+    const rows = await fetchAll(supabase, 'like_counts', 'item_id, cnt', (q) => q.in('item_id', list).order('item_id'));
+    for (const r of rows) map[r.item_id] = Number(r.cnt);
+  } catch (e) {
+    const rows = await fetchAll(supabase, 'likes', 'item_id', (q) => q.in('item_id', list).order('item_id').order('ip'));
+    for (const r of rows) map[r.item_id] = (map[r.item_id] || 0) + 1;
   }
   return map;
 }
 
 // Bir IP'nin hangi öğeleri beğendiğinin kümesi
 async function getLikedSetForIp(ip) {
-  const { data, error } = await supabase.from('likes').select('item_id').eq('ip', ip);
-  if (error) throw error;
-  return new Set((data || []).map((r) => r.item_id));
+  const rows = await fetchAll(supabase, 'likes', 'item_id', (q) => q.eq('ip', ip).order('item_id'));
+  return new Set(rows.map((r) => r.item_id));
 }
 
 // Bir öğe tamamen silindiğinde (reddedildiğinde) beğenilerini de temizle
@@ -69,6 +89,7 @@ module.exports = {
   countLikes,
   toggleLike,
   getAllCounts,
+  countsForItemIds,
   getLikedSetForIp,
   removeAllForItem,
   countLikesForItemIds,

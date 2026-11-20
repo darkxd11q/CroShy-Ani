@@ -1,24 +1,21 @@
 const supabase = require('./supabaseClient');
+const { startOfTodayTR } = require('./src/lib/time');
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-// Bir gönderimi kaydet. Bu kayıt, ilgili anı reddedilse/silinse bile
-// kalıcıdır — böylece bir kullanıcı "gönder, reddedilirse tekrar gönder"
-// döngüsüyle günlük limiti aşamaz.
-async function recordSubmission(ip) {
-  const { error } = await supabase.from('submission_log').insert({ ip, ts: Date.now() });
-  if (error) throw error;
-}
-
-async function countToday(ip) {
-  const cutoff = Date.now() - DAY_MS;
+// Günlük gönderim sayacı. Anahtar HESAP kimliğidir ("u:<id>"). "Bugün" = Türkiye saatiyle
+// gece yarısından beri (kayan 24 saat DEĞİL): hak her gece 00:00'da yenilenir.
+async function countToday(key) {
   const { count, error } = await supabase
     .from('submission_log')
     .select('*', { count: 'exact', head: true })
-    .eq('ip', ip)
-    .gt('ts', cutoff);
+    .eq('ip', key)
+    .gte('ts', startOfTodayTR());
   if (error) throw error;
   return count || 0;
 }
 
-module.exports = { recordSubmission, countToday };
+async function recordSubmission(key) {
+  const { error } = await supabase.from('submission_log').insert({ ip: key, ts: Date.now() });
+  if (error) throw error;
+}
+
+module.exports = { countToday, recordSubmission };

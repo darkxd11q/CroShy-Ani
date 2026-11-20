@@ -147,10 +147,14 @@
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>
         <h2 style="margin:0;">Onaylı Anılar</h2>
-        <div class="admin-stat"><%= approvedItems.length %> anı yayında — gerekirse buradan kaldırabilirsin</div>
+        <div class="admin-stat"><%= locals.approvedTotal != null ? approvedTotal : approvedItems.length %> anı yayında — en yeni <%= approvedItems.length %> tanesi aşağıda; ötesi için ara ya da "daha fazla"</div>
       </div>
     </div>
 
+    <div class="upload-card" style="margin-bottom: 12px;">
+      <input type="text" id="approvedSearch" placeholder="Anı ara (gönderen adı ya da açıklama)…" autocomplete="off" maxlength="40"
+             style="width:100%; background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+    </div>
     <div class="profile-grid" id="approved-list" style="margin-bottom: 20px;">
       <% if (approvedItems.length === 0) { %>
         <div class="empty-state">Henüz onaylı bir anı yok</div>
@@ -168,6 +172,7 @@
         </div>
       <% }) %>
     </div>
+    <div style="text-align:center; margin: -6px 0 20px;"><button type="button" class="btn ghost" id="approvedMore" hidden>Daha fazla göster</button></div>
 
     <div class="admin-topbar" style="margin-top: 48px;">
       <div>

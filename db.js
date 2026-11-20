@@ -1,4 +1,5 @@
 const supabase = require('./supabaseClient');
+const { fetchAll } = require('./pager');
 
 function fromRow(row) {
   return {
@@ -40,20 +41,23 @@ function toRow(item) {
 // sadece admin'in "Son Silinenler" ekranında geri alınabilir durumda kalır.
 
 async function getPendingItems() {
-  const { data, error } = await supabase
-    .from('items')
-    .select('*')
-    .eq('status', 'pending')
-    .is('deleted_at', null)
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  return (data || []).map(fromRow);
+  const rows = await fetchAll(supabase, 'items', '*', (q) => q.eq('status', 'pending').is('deleted_at', null).order('created_at', { ascending: true }).order('id'));
+  return rows.map(fromRow);
 }
 
 async function getApprovedItems() {
-  const { data, error } = await supabase.from('items').select('*').eq('status', 'approved').is('deleted_at', null);
+  const rows = await fetchAll(supabase, 'items', '*', (q) => q.eq('status', 'approved').is('deleted_at', null).order('created_at', { ascending: true }).order('id'));
+  return rows.map(fromRow);
+}
+
+// Admin paneli için sayfalı + aranabilir onaylı anı listesi (hepsini çekmez)
+async function listApprovedPage({ offset = 0, limit = 40, q = '' } = {}) {
+  let query = supabase.from('items').select('*', { count: 'exact' }).eq('status', 'approved').is('deleted_at', null);
+  const term = String(q || '').trim().replace(/[%,()*\\]/g, '').slice(0, 40);
+  if (term) query = query.or(`uploader_name.ilike.%${term}%,caption.ilike.%${term}%`);
+  const { data, error, count } = await query.order('created_at', { ascending: false }).order('id').range(offset, offset + limit - 1);
   if (error) throw error;
-  return (data || []).map(fromRow);
+  return { items: (data || []).map(fromRow), total: count || 0 };
 }
 
 async function getApprovedCount() {
@@ -73,14 +77,8 @@ async function getItemById(id) {
 }
 
 async function getPendingItemsByIp(ip) {
-  const { data, error } = await supabase
-    .from('items')
-    .select('*')
-    .eq('status', 'pending')
-    .eq('ip', ip)
-    .is('deleted_at', null);
-  if (error) throw error;
-  return (data || []).map(fromRow);
+  const rows = await fetchAll(supabase, 'items', '*', (q) => q.eq('status', 'pending').eq('ip', ip).is('deleted_at', null).order('id'));
+  return rows.map(fromRow);
 }
 
 async function insertItem(item) {
@@ -94,14 +92,8 @@ async function approveItem(id) {
 }
 
 async function getItemsByUserId(userId) {
-  const { data, error } = await supabase
-    .from('items')
-    .select('*')
-    .eq('user_id', userId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(fromRow);
+  const rows = await fetchAll(supabase, 'items', '*', (q) => q.eq('user_id', userId).is('deleted_at', null).order('created_at', { ascending: false }).order('id'));
+  return rows.map(fromRow);
 }
 
 // deleted_at durumuna bakmaksızın ham kaydı getirir — sadece geri alma
@@ -151,24 +143,14 @@ async function restoreItem(id) {
 // Admin'in "Son Silinenler" ekranında gösterdiği, henüz kalıcı olarak
 // temizlenmemiş (24 saati doldurmamış) silinmiş öğeler.
 async function getDeletedItems() {
-  const { data, error } = await supabase
-    .from('items')
-    .select('*')
-    .not('deleted_at', 'is', null)
-    .order('deleted_at', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(fromRow);
+  const rows = await fetchAll(supabase, 'items', '*', (q) => q.not('deleted_at', 'is', null).order('deleted_at', { ascending: false }).order('id'));
+  return rows.map(fromRow);
 }
 
 // 24 saati dolmuş, artık kalıcı olarak temizlenmesi gereken öğeler.
 async function getExpiredDeletedItems(cutoffMs) {
-  const { data, error } = await supabase
-    .from('items')
-    .select('*')
-    .not('deleted_at', 'is', null)
-    .lt('deleted_at', cutoffMs);
-  if (error) throw error;
-  return (data || []).map(fromRow);
+  const rows = await fetchAll(supabase, 'items', '*', (q) => q.not('deleted_at', 'is', null).lt('deleted_at', cutoffMs).order('id'));
+  return rows.map(fromRow);
 }
 
 // Kalıcı silme — sadece süresi dolmuş silinenleri temizlerken kullanılır.
@@ -180,6 +162,7 @@ async function hardDeleteItem(id) {
 module.exports = {
   getPendingItems,
   getApprovedItems,
+  listApprovedPage,
   getApprovedCount,
   getItemById,
   getPendingItemsByIp,
