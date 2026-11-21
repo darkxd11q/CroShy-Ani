@@ -8,6 +8,10 @@
 <link rel="apple-touch-icon" href="/img/logo-192.png" />
 <script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
 <link rel="stylesheet" href="/css/style.css" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#0b0a14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<script src="/js/pwa.js" defer></script>
 </head>
 <body class="no-scroll">
   <a class="skip-link" href="#galeri">İçeriğe geç</a>
@@ -77,8 +81,11 @@
       <a href="/upload" class="btn primary">Bir Anı Paylaş</a>
       <a href="#galeri" class="btn ghost">Anıları Gör ↓</a>
       <a href="/random" class="btn ghost">🎲 Rastgele Anı</a>
+      <a href="/ara" class="btn ghost">🔍 Ara</a>
     </div>
   </section>
+
+  <section class="otd" id="onThisDay" hidden aria-label="Geçen yıl bugün"></section>
 
   <section class="gallery-section" id="galeri">
     <div class="gallery-head">
@@ -111,6 +118,7 @@
   <script src="/js/auto-login-badge.js"></script>
   <script src="/js/lightbox.js"></script>
   <script src="/js/main.js"></script>
+  <script src="/js/on-this-day.js"></script>
   <script src="/js/cookie-banner.js"></script>
 </body>
 </html>

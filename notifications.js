@@ -14,7 +14,9 @@ async function create({ userId, type, text, link, dedupeKey }) {
     read: false,
     dedupe_key: dedupeKey || null,
   });
-  if (error && error.code !== '23505') throw error; // aynı bildirim zaten var: sessizce geç
+  if (error && error.code === '23505') return false; // aynı bildirim zaten var: sessizce geç
+  if (error) throw error;
+  return true;
 }
 
 async function list(userId, limit = 30) {

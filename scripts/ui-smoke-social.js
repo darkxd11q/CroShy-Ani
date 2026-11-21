@@ -85,7 +85,7 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
   check('[menü] hesap menüsü başta kapalı, düğme ayse yazıyor', menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'false' && /ayse/.test(menuBtn.textContent));
   menuBtn.click();
   const mi = [...menuPanel.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent.trim());
-  check('[menü] tek tuşla açıldı: Profilim, Herkese açık profilim, Kod, Çıkış', !menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'true' && mi.length === 4 && /Profilim/.test(mi[0]) && /Herkese açık/.test(mi[1]) && /Kod/.test(mi[2]) && /Çıkış/.test(mi[3]), mi.join(' | '));
+  check('[menü] tek tuşla açıldı: Profilim, Herkese açık profilim, Kod, Çıkış', !menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'true' && mi.length === 5 && /Profilim/.test(mi[0]) && /Herkese açık/.test(mi[1]) && /Kod/.test(mi[2]) && /Yıl özetim/.test(mi[3]) && /Çıkış/.test(mi[4]), mi.join(' | '));
   check('[menü] bağlantılar doğru: /profile, /u/ayse, /redeem, POST /logout', menuPanel.querySelector('a[href="/profile"]') && menuPanel.querySelector('a[href="/u/ayse"]') && menuPanel.querySelector('a[href="/redeem"]') && menuPanel.querySelector('form[action="/logout"][method="post"]'));
   n.doc.dispatchEvent(new n.win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   check('[menü] Esc ile kapandı', menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'false');

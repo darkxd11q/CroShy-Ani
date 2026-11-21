@@ -73,6 +73,8 @@ const PREMIUM_DAILY_LIMIT = 3;
 const PREMIUM_THEMES = ['ocean', 'sunset', 'emerald'];
 // Haftalık rozet kazananlara 15 gün boyunca açılan 2 ekstra tema
 const BASE_THEMES = PREMIUM_THEMES;
+// Herkesin (premium olmayanların da) seçebildiği temalar
+const FREE_THEMES = ['gta'];
 const REWARD_THEMES = ['aurora', 'royal'];
 const REWARD_THEME_MS = 15 * 24 * 60 * 60 * 1000;
 
@@ -166,7 +168,7 @@ function generateRedeemCode() {
 // Tema erişimi: ÖZEL/Plus (ve sınırsız hesaplar: Site Kurucusu/CroShy) 3 temel
 // temayı, haftalık rozet kazananlar ayrıca 15 gün boyunca 2 ödül temasını kullanır.
 function allowedThemesFor(user, rewardExpiry) {
-  const list = [];
+  const list = [...FREE_THEMES];
   if (hasPremium(user) || hasFullExemption(user)) list.push(...BASE_THEMES);
   if (rewardExpiry && rewardExpiry > Date.now()) list.push(...REWARD_THEMES);
   return list;
@@ -589,7 +591,8 @@ async function buildOwnProfileData(userId, username) {
     premium: !!limits.premium,
     theme: user ? user.theme : null,
     allowedThemes,
-    canThemes: allowedThemes.length > 0,
+    // "canThemes": premium/ödül temalarına erişim (herkese açık GTA 6 temasını saymaz)
+    canThemes: allowedThemes.some((t) => !FREE_THEMES.includes(t)),
     rewardExpiry,
     avatarUrl: user ? user.avatarUrl : null,
     canGif: canUseGifAvatar(user),
@@ -649,6 +652,7 @@ module.exports = {
   BADGE_INFO,
   BADGE_ORDER,
   BASE_THEMES,
+  FREE_THEMES,
   CODE_CHARS,
   CODE_PREFIX,
   CODE_VALID_MS,

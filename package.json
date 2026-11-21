@@ -11,7 +11,8 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node --test",
-    "test:ui": "node scripts/ui-smoke-home.js && node scripts/ui-smoke-social.js && node scripts/ui-smoke-admin.js && node scripts/ui-smoke-menus.js"
+    "test:ui": "node scripts/ui-smoke-home.js && node scripts/ui-smoke-social.js && node scripts/ui-smoke-admin.js && node scripts/ui-smoke-menus.js && node scripts/ui-smoke-features.js",
+    "vapid": "node scripts/gen-vapid.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
@@ -23,7 +24,8 @@
     "express-session": "^1.18.1",
     "helmet": "^7.1.0",
     "pg": "^8.11.5",
-    "qrcode": "^1.5.3"
+    "qrcode": "^1.5.3",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "jsdom": "^22.1.0"

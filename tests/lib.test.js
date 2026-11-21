@@ -48,10 +48,10 @@ test('limitler: üye / ÖZEL / sınırsız', () => {
 });
 
 test('temalar: kim hangi temayı kullanabilir', () => {
-  assert.deepEqual(core.allowedThemesFor({ badges: ['member'] }, 0), []);
-  assert.deepEqual(core.allowedThemesFor({ badges: ['special'] }, 0), ['ocean', 'sunset', 'emerald']);
-  assert.deepEqual(core.allowedThemesFor({ badges: ['member'] }, Date.now() + 1000), ['aurora', 'royal']);
-  assert.deepEqual(core.allowedThemesFor({ badges: ['member'] }, Date.now() - 1000), []);
+  assert.deepEqual(core.allowedThemesFor({ badges: ['member'] }, 0), ['gta']); // GTA 6 herkese açık
+  assert.deepEqual(core.allowedThemesFor({ badges: ['special'] }, 0), ['gta', 'ocean', 'sunset', 'emerald']);
+  assert.deepEqual(core.allowedThemesFor({ badges: ['member'] }, Date.now() + 1000), ['gta', 'aurora', 'royal']);
+  assert.deepEqual(core.allowedThemesFor({ badges: ['member'] }, Date.now() - 1000), ['gta']);
 });
 
 test('isim stili: XSS ve geçersiz renkler', () => {

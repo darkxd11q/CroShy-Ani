@@ -13,7 +13,7 @@ test('tüm ön yüz betikleri sözdizimi olarak geçerli', () => {
 
 test('ana sayfa: sayfalama, etiket filtresi, rastgele anı ve erişilebilirlik öğeleri', () => {
   const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
-  for (const needle of ['loadSentinel', 'loadMoreBtn', 'tagFilter', '/random', 'skip-link', 'cookie-banner.js', 'auth-nav.js']) {
+  for (const needle of ['loadSentinel', 'loadMoreBtn', 'tagFilter', '/random', 'skip-link', 'cookie-banner.js', 'auth-nav.js', 'onThisDay', '/ara', 'manifest.webmanifest']) {
     assert.ok(html.includes(needle), 'ana sayfada eksik: ' + needle);
   }
 });

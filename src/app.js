@@ -14,6 +14,8 @@ require('./routes/notifications');
 require('./routes/legal');
 require('./routes/reports');
 require('./routes/recovery');
+require('./routes/push');
+require('./routes/discover');
 require('./routes/admin_accounts');
 require('./routes/notfound');
 

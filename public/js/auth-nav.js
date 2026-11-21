@@ -100,7 +100,7 @@ window.getSessionStatus =
     lo.textContent = '🚪 Çıkış yap';
     logout.appendChild(lo);
 
-    panel.append(item('/profile', '👤 Profilim'), item('/u/' + encodeURIComponent(name), '🌐 Herkese açık profilim'), item('/redeem', '🎟️ Kod kullan'), sep(), logout);
+    panel.append(item('/profile', '👤 Profilim'), item('/u/' + encodeURIComponent(name), '🌐 Herkese açık profilim'), item('/redeem', '🎟️ Kod kullan'), item('/yilim', '🎁 Yıl özetim'), sep(), logout);
     root.append(btn, panel);
 
     const items = () => [...panel.querySelectorAll('[role="menuitem"]')];
@@ -299,6 +299,8 @@ window.getSessionStatus =
         head.className = 'notif-head';
         head.textContent = 'Bildirimler';
         panel.appendChild(head);
+        const pushRow = buildPushRow();
+        if (pushRow) panel.appendChild(pushRow);
         if (!d.items || d.items.length === 0) {
           const empty = document.createElement('div');
           empty.className = 'notif-empty';
@@ -328,6 +330,54 @@ window.getSessionStatus =
     btn.addEventListener('click', () => (panel.hidden ? open() : close()));
     document.addEventListener('keydown', (e) => e.key === 'Escape' && !panel.hidden && close());
     return btn;
+  }
+
+  // "Bu cihazda bildirimleri aç/kapat" (yalnızca sunucuda VAPID anahtarları tanımlıysa görünür)
+  function buildPushRow() {
+    const P = window.CroshyPush;
+    if (!P || !P.available()) return null;
+    const row = document.createElement('div');
+    row.className = 'notif-push';
+    row.hidden = true;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn small';
+    const hint = document.createElement('div');
+    hint.className = 'notif-push-hint';
+    row.append(btn, hint);
+
+    let state = null;
+    let errMsg = '';
+    const paint = () => {
+      if (!state || !state.enabled) {
+        row.hidden = true;
+        return;
+      }
+      row.hidden = false;
+      if (state.needsInstall) {
+        btn.hidden = true;
+        hint.textContent = 'iPhone\'da bildirim için önce Paylaş ▸ "Ana Ekrana Ekle" yapıp uygulamayı oradan aç.';
+        return;
+      }
+      btn.hidden = false;
+      btn.textContent = state.subscribed ? '🔕 Bu cihazda bildirimleri kapat' : '📲 Bu cihazda bildirimleri aç';
+      hint.textContent = errMsg || (state.permission === 'denied' ? 'Tarayıcıda bildirim izni engelli; site ayarlarından açmalısın.' : '');
+    };
+    P.getState().then((s) => { state = s; paint(); }).catch(() => (row.hidden = true));
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      errMsg = '';
+      try {
+        if (state.subscribed) await P.disable();
+        else await P.enable();
+        state = await P.getState();
+      } catch (e) {
+        errMsg = e.message;
+      }
+      btn.disabled = false;
+      paint();
+    });
+    return row;
   }
 
   window.openAuthModal = openAuthModal;

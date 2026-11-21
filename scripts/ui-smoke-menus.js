@@ -47,7 +47,7 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
   const ph = ejs.render(fs.readFileSync(P + '/views/profile.ejs', 'utf8'), {
     username: 'ayse', bio: '', BADGE_INFO, BADGE_ORDER: ['member'], createdAt: Date.now(), totalCount: 0, approvedCount: 0, pendingCount: 0, totalLikes: 0, items: [],
     limits: { imageBytes: 1, videoBytes: 1, videoDurationSec: 150, unlimited: false, premium: false }, hasCustomLimits: false, error: null, success: null, theme: null, renderName,
-    badges: ['member'], premium: false, canThemes: false, allowedThemes: [], rewardExpiry: 0, avatarUrl: null, canGif: false, nameChange: { used: 0, remaining: 2, nextAt: null }, nameStyle: null, canStyleName: false,
+    badges: ['member'], premium: false, canThemes: false, allowedThemes: ['gta'], rewardExpiry: 0, avatarUrl: null, canGif: false, nameChange: { used: 0, remaining: 2, nextAt: null }, nameStyle: null, canStyleName: false,
   }, { filename: P + '/views/profile.ejs' });
   const pd = new JSDOM(strip(ph), { url: 'http://localhost/profile', pretendToBeVisual: true, runScripts: 'outside-only' });
   const pw = pd.window; const $ = (s) => pw.document.querySelector(s);
@@ -57,6 +57,7 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
   check('[profil] Görünüm = Temalar + İsim rengi', !!$('#acc-gorunum #nameStyleEditor, #acc-gorunum .theme-teaser') && /Temalar/.test($('#acc-gorunum').textContent) && /İsim Rengi/.test($('#acc-gorunum').textContent));
   check('[profil] Hesap = Kullanıcı adı + Şifre + Verilerim(sil)', ['/profile/change-name', '/profile/change-password', '/profile/delete-account'].every((a) => $('#acc-hesap form[action="' + a + '"]')));
   check('[profil] hiçbir form/id kaybolmadı (avatar, bio, tema formları duruyor)', !!$('#avatarEditBtn') && !!$('form[action="/profile/update-bio"]') && !!$('form[action="/profile/update-theme"]'));
+  check('[profil] GTA 6 teması herkese açık (kilitsiz), Okyanus kilitli', !!$('button[name="theme"][value="gta"]') && !$('button[name="theme"][value="gta"]').disabled && $('button[name="theme"][value="ocean"]').disabled);
   pw.eval(fs.readFileSync(P + '/public/js/profile-accordion.js', 'utf8'));
   $('#acc-hesap form[action="/profile/change-password"]').dispatchEvent(new pw.Event('submit', { cancelable: true }));
   check('[profil] form gönderilince o kategori hatırlanır', pw.sessionStorage.getItem('croshy_profile_open') === 'acc-hesap');

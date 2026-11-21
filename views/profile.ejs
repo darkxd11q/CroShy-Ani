@@ -8,6 +8,10 @@
 <link rel="apple-touch-icon" href="/img/logo-192.png" />
 <script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
 <link rel="stylesheet" href="/css/style.css" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#0b0a14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<script src="/js/pwa.js" defer></script>
 </head>
 <body>
 
@@ -191,13 +195,14 @@
       <h3 class="profile-section-title acc-sub">🎨 Temalar</h3>
       <% var THEME_OPTIONS = [
         { id: '', name: 'Varsayılan', kind: 'free', sw: ['#8b5cf6', '#ec4899', '#22d3ee'] },
+        { id: 'gta', name: 'GTA 6 🌴', kind: 'free', sw: ['#3B146B', '#7B208F', '#C9349B', '#F36A78', '#F87572', '#FF9B55', '#FFB458'] },
         { id: 'ocean', name: 'Okyanus', kind: 'base', sw: ['#0ea5e9', '#06b6d4', '#5eead4'] },
         { id: 'sunset', name: 'Gün Batımı', kind: 'base', sw: ['#f97316', '#ec4899', '#fbbf24'] },
         { id: 'emerald', name: 'Zümrüt', kind: 'base', sw: ['#10b981', '#34d399', '#a3e635'] },
         { id: 'aurora', name: 'Aurora', kind: 'reward', sw: ['#2dd4bf', '#a78bfa', '#f0abfc'] },
         { id: 'royal', name: 'Kraliyet', kind: 'reward', sw: ['#eab308', '#dc2626', '#fde047'] }
       ]; var allowed = locals.allowedThemes || []; %>
-      <p class="profile-section-sub">Sitenin görünümünü sana özel renklerle değiştir. 🏅 Ödül temaları, haftalık rozet kazandıktan sonra 15 gün boyunca açılır.</p>
+      <p class="profile-section-sub">Sitenin görünümünü sana özel renklerle değiştir. 🌴 <strong>GTA 6</strong> teması herkese açık. 🏅 Ödül temaları, haftalık rozet kazandıktan sonra 15 gün boyunca açılır.</p>
       <form method="POST" action="/profile/update-theme">
         <div class="theme-grid">
           <% THEME_OPTIONS.forEach(function(t) { var ok = t.kind === 'free' || allowed.includes(t.id); %>
@@ -215,7 +220,7 @@
       </form>
       <% if (!locals.canThemes) { %>
         <div class="theme-teaser" style="margin-top:14px;">
-          <span>🔒 Temalar <strong>ÖZEL</strong> ve <strong>Plus</strong> üyelere özel.</span>
+          <span>🔒 Diğer temalar <strong>ÖZEL</strong> ve <strong>Plus</strong> üyelere özel.</span>
           <a href="/redeem" class="btn small">🎟️ Kodum Var</a>
         </div>
       <% } %>

@@ -46,6 +46,10 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
 - Uygunsuz içerikler için **şikayet et** düğmesi (anı ve yorumlar)
 - E-posta olmadan **kurtarma kodlarıyla** şifre sıfırlama (kayıtta 8 tek kullanımlık kod verilir)
 - Günlük paylaşım hakkı her gece yarısı (Türkiye saati) yenilenir
+- 📅 Ana sayfada **"Geçen yıl bugün"** şeridi; 🔍 kişi, #etiket ve açıklamada **arama**, trend etiketler
+- 🎁 Kişisel **yıl özeti** (anı/beğeni/yorum sayıları, en çok beğenilen anın, en aktif ayın…) ve hikaye boyutunda paylaşım kartı
+- 📲 Ana ekrana eklenebilir (PWA) ve **telefona bildirim** (onay, yorum, etiket…) — bildirim çanından cihaz başına açılır/kapanır
+- 🌴 **GTA 6 teması** herkese açık (profil → Görünüm); diğer temalar ÖZEL/Plus üyelere özel
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**
@@ -95,6 +99,12 @@ bilgilerinle doldur.
 sunucu açılışta `migrations/` klasöründeki güncellemeleri kendisi uygular (elle SQL çalıştırmana gerek kalmaz).
 Haftalık rozetler de veritabanında (`pg_cron`) çalıştığı için sunucu uyuyor olsa bile Cuma 17:15'te dağıtılır.
 `DATABASE_URL` vermezsen `supabase-schema.sql` dosyasını SQL Editor'de elle çalıştırman yeterlidir.
+
+### 3.2. Telefona bildirim (isteğe bağlı)
+
+`npm run vapid` komutuyla anahtar çifti üret; `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` ve `VAPID_SUBJECT` değişkenlerini
+Render > Environment'a ekle. Anahtarlar tanımlı değilse bildirim özelliği görünmez, site normal çalışır.
+iPhone'da bildirim yalnızca uygulama "Ana Ekrana Ekle" ile kurulduysa çalışır.
 
 ### 4. Çalıştırma
 
