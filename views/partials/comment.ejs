@@ -1,0 +1,27 @@
+<%
+  var replies = c.replies || [];
+  var pinned = !!c.pinnedAt;
+%>
+<li class="comment<%= isReply ? ' is-reply' : '' %><%= pinned ? ' is-pinned' : '' %>" data-id="<%= c.id %>">
+  <% if (c.avatarUrl) { %><img class="comment-avatar" src="<%= c.avatarUrl %>" alt="" /><% } else { %><span class="comment-avatar fallback"><%= c.username.charAt(0).toUpperCase() %></span><% } %>
+  <div class="comment-main">
+    <% if (pinned) { %><div class="comment-pinned-label">📌 Sabitlenmiş yorum</div><% } %>
+    <div class="comment-head">
+      <a href="/u/<%= encodeURIComponent(c.username) %>" class="comment-author"><%- c.nameHtml %></a>
+      <% if (c.byOwner) { %><span class="comment-owner-tag">anı sahibi</span><% } %>
+      <time><%= new Date(c.createdAt).toLocaleString('tr-TR') %></time>
+      <% if (loggedIn && !c.isMine) { %><button type="button" class="comment-report" data-report-comment="<%= c.id %>" aria-label="Yorumu şikayet et">🚩</button><% } %>
+      <% if (c.canDelete) { %><button type="button" class="comment-del" data-del="<%= c.id %>" aria-label="Yorumu sil">🗑️</button><% } %>
+    </div>
+    <div class="comment-body"><%- c.bodyHtml %></div>
+    <div class="comment-actions">
+      <% if (canInteract) { %><button type="button" class="comment-act" data-reply="<%= c.id %>" data-name="<%= c.username %>">↩ Yanıtla</button><% } %>
+      <% if (c.canPin) { %><button type="button" class="comment-act" data-pin-comment="<%= c.id %>" data-pinned="<%= pinned ? '1' : '0' %>"><%= pinned ? '📌 Sabitlemeyi kaldır' : '📌 Sabitle' %></button><% } %>
+    </div>
+    <% if (!isReply) { %>
+      <ul class="replies" data-replies-of="<%= c.id %>">
+        <% replies.forEach(function(r) { %><%- include('comment', { c: r, isReply: true, loggedIn: loggedIn, canInteract: canInteract }) %><% }) %>
+      </ul>
+    <% } %>
+  </div>
+</li>

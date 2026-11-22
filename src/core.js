@@ -604,6 +604,7 @@ async function buildOwnProfileData(userId, username) {
     })(),
     nameChange,
     recoveryUnused,
+    pinnedItemId: (user && user.pinnedItemId) || null,
     nameStyle: user ? user.nameStyle : null,
     canStyleName: canStyleName(user),
     hasCustomLimits: !!(user && (user.customImageBytes || user.customVideoBytes || user.customVideoDurationSec)),

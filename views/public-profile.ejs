@@ -99,6 +99,21 @@
       </div>
     </div>
 
+    <% if (locals.pinned) { %>
+      <section class="pinned-memory" aria-label="Vitrin anısı">
+        <h2 class="profile-section-title">📌 Vitrin anısı</h2>
+        <a class="pinned-card" href="/m/<%= pinned.id %>">
+          <% if (pinned.type === 'video') { %>
+            <img src="<%= videoPoster(pinned.url, 900) %>" alt="<%= pinned.caption || 'Vitrin anısı' %>" />
+            <span class="pinned-play">▶</span>
+          <% } else { %>
+            <img src="<%= cloudImg(pinned.url, 900) %>" alt="<%= pinned.caption || 'Vitrin anısı' %>" />
+          <% } %>
+          <span class="pinned-meta"><%= pinned.caption || '' %> <small>❤️ <%= pinned.likes %></small></span>
+        </a>
+      </section>
+    <% } %>
+
     <h2 class="profile-section-title">🖼️ <%= profileUsername %>'in Anıları</h2>
     <% if (items.length === 0) { %>
       <div class="empty-state" style="margin-bottom: 40px;">Henüz onaylanmış bir anısı yok.</div>

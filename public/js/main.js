@@ -125,6 +125,12 @@ function richCaption(text) {
     });
 }
 
+// Kartın köşesinde en çok verilen 2 emoji (küçük)
+function renderTop(tops) {
+  if (!tops || tops.length === 0) return '';
+  return '<span class="top-reactions" aria-label="En çok verilen tepkiler">' + tops.map((t) => `<span>${escapeHtml(t.emoji)}<b>${t.count}</b></span>`).join('') + '</span>';
+}
+
 function renderRow(item, index) {
   const side = index % 2 === 0 ? 'left' : 'right';
   const avatarHtml = item.uploaderAvatar
@@ -137,6 +143,11 @@ function renderRow(item, index) {
         ${renderMedia(item)}
         ${item.type === 'video' ? '<div class="play-icon">▶</div>' : ''}
         <span class="badge">${item.type === 'video' ? '🎬 Video' : '📷 Fotoğraf'}</span>
+        ${renderTop(item.topReactions)}
+        <div class="card-tools">
+          <button type="button" class="card-tool react-open" aria-haspopup="true" aria-label="Tepki ver" title="Tepki ver">😊</button>
+          <button type="button" class="card-tool save-open ${item.savedByMe ? 'saved' : ''}" aria-haspopup="true" aria-label="Listeye kaydet" title="Listeye kaydet">🔖</button>
+        </div>
         <button type="button" class="like-btn ${item.likedByMe ? 'liked' : ''}" data-id="${escapeHtml(item.id)}" aria-pressed="${item.likedByMe ? 'true' : 'false'}" aria-label="Beğen">
           <span class="heart">${item.likedByMe ? '❤️' : '🤍'}</span>
           <span class="like-count">${item.likes || 0}</span>
@@ -155,6 +166,16 @@ function renderRow(item, index) {
 
 // ---- Olay yönetimi (tek yerden; sonradan eklenen kartlar da çalışır) ----
 TIMELINE.addEventListener('click', (e) => {
+  const reactBtn = e.target.closest('.react-open');
+  if (reactBtn) {
+    e.stopPropagation();
+    return openReact(reactBtn);
+  }
+  const saveBtn = e.target.closest('.save-open');
+  if (saveBtn) {
+    e.stopPropagation();
+    return openSave(saveBtn);
+  }
   const likeBtn = e.target.closest('.like-btn');
   if (likeBtn) {
     e.stopPropagation();
@@ -176,6 +197,37 @@ TIMELINE.addEventListener('keydown', (e) => {
     if (it) openLightbox(it, e.target);
   }
 });
+
+function paintTop(card, tops) {
+  const old = card.querySelector('.top-reactions');
+  if (old) old.remove();
+  const html = renderTop(tops);
+  if (html) card.querySelector('.badge').insertAdjacentHTML('afterend', html);
+}
+function cardItem(btn) {
+  const card = btn.closest('.memory-card');
+  return { card, item: card && items[Number(card.dataset.index)] };
+}
+function openReact(btn) {
+  const { card, item } = cardItem(btn);
+  if (!item || !window.CroshyReact) return;
+  window.CroshyReact.open(btn, item.id, {
+    onSummary: (s) => {
+      item.topReactions = window.CroshyReact.top2(s.counts);
+      paintTop(card, item.topReactions);
+    },
+  });
+}
+function openSave(btn) {
+  const { item } = cardItem(btn);
+  if (!item || !window.CroshySave) return;
+  window.CroshySave.open(btn, item.id, {
+    onChange: ({ saved }) => {
+      item.savedByMe = saved;
+      btn.classList.toggle('saved', saved);
+    },
+  });
+}
 
 async function handleLike(btn) {
   const id = btn.dataset.id;

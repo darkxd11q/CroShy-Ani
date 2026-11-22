@@ -5,7 +5,7 @@ const supabase = require('../../supabaseClient');
 const { fetchAll } = require('../../pager');
 const { getSnapshot } = require('../snapshot');
 const { onThisDay } = require('../lib/onthisday');
-const { searchItems, searchUsers, searchTags, trendingTags } = require('../lib/search');
+const { searchItems, searchUsers, searchTags, trendingTags, popularTags } = require('../lib/search');
 const { buildWrapped, trYear } = require('../lib/wrapped');
 const { cloudImg, videoPoster } = require('../lib/cloud');
 
@@ -59,6 +59,16 @@ app.get(
     const snap = await getSnapshot();
     res.set('Cache-Control', 'public, max-age=120');
     res.json({ tags: trendingTags(snap.items) });
+  })
+);
+
+// Anı yüklerken önerilen "sık kullanılan etiketler": GERÇEK kullanımdan (en çok farklı kişinin kullandığı); hiç yoksa boş
+app.get(
+  '/api/tags/popular',
+  asyncRoute(async (req, res) => {
+    const snap = await getSnapshot();
+    res.set('Cache-Control', 'public, max-age=120');
+    res.json({ tags: popularTags(snap.items, Math.min(20, Math.max(1, Number(req.query.limit) || 12))) });
   })
 );
 

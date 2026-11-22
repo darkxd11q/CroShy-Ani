@@ -16,6 +16,9 @@ require('./routes/reports');
 require('./routes/recovery');
 require('./routes/push');
 require('./routes/discover');
+require('./routes/collections');
+require('./routes/drafts');
+require('./routes/pins');
 require('./routes/admin_accounts');
 require('./routes/notfound');
 

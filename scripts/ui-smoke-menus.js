@@ -52,7 +52,7 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
   const pd = new JSDOM(strip(ph), { url: 'http://localhost/profile', pretendToBeVisual: true, runScripts: 'outside-only' });
   const pw = pd.window; const $ = (s) => pw.document.querySelector(s);
   const accs = [...pw.document.querySelectorAll('details.acc')];
-  check('[profil] 4 kategori: Sınırlarım, Anılarım, Görünüm, Hesap', accs.map((a) => a.id).join(',') === 'acc-sinirlar,acc-animlar,acc-gorunum,acc-hesap', accs.map((a) => a.id).join(','));
+  check('[profil] 5 kategori: Sınırlarım, Anılarım, Taslaklarım, Görünüm, Hesap', accs.map((a) => a.id).join(',') === 'acc-sinirlar,acc-animlar,acc-taslaklar,acc-gorunum,acc-hesap', accs.map((a) => a.id).join(','));
   check('[profil] başta yalnızca Anılarım açık (diğerleri kapalı)', accs.filter((a) => a.open).map((a) => a.id).join(',') === 'acc-animlar');
   check('[profil] Görünüm = Temalar + İsim rengi', !!$('#acc-gorunum #nameStyleEditor, #acc-gorunum .theme-teaser') && /Temalar/.test($('#acc-gorunum').textContent) && /İsim Rengi/.test($('#acc-gorunum').textContent));
   check('[profil] Hesap = Kullanıcı adı + Şifre + Verilerim(sil)', ['/profile/change-name', '/profile/change-password', '/profile/delete-account'].every((a) => $('#acc-hesap form[action="' + a + '"]')));

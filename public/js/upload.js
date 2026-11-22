@@ -16,6 +16,7 @@ const trimStartLabel = document.getElementById('trimStartLabel');
 const trimEndLabel = document.getElementById('trimEndLabel');
 const trimTotalLabel = document.getElementById('trimTotalLabel');
 const trimMaxLenLabel = document.getElementById('trimMaxLenLabel');
+const draftBtn = document.getElementById('draftBtn');
 
 // Çok uzun videoları "kırpacağım" diyerek sınırsız depolamayı önlemek için
 // makul bir üst sınır — sadece muaf olmayan hesaplar için geçerli.
@@ -81,7 +82,7 @@ fetch('/api/me')
     const limitNote = me.hasCustomLimits ? ' · Senin için özel sınırlar tanımlı ✨' : '';
 
     if (remainingToday <= 0) {
-      quotaInfo.textContent = `Bugünkü gönderme hakkını kullandın (günde en fazla ${me.dailyLimit} anı). Hakkın gece yarısı (Türkiye saati) yenilenir.`;
+      quotaInfo.textContent = `Bugünkü gönderme hakkını kullandın (günde en fazla ${me.dailyLimit} anı). Hakkın gece yarısı (Türkiye saati) yenilenir. Taslak olarak kaydedebilirsin.`;
       submitBtn.disabled = true;
       submitBtn.textContent = 'Bugünlük hakkın doldu';
     } else if (me.unlimited) {
@@ -201,10 +202,11 @@ function showStatus(msg, type) {
   statusMsg.className = `status-msg show ${type}`;
 }
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
+// mode: 'submit' (onaya gönder) ya da 'draft' (taslak olarak kaydet: günlük hakka sayılmaz)
+async function handleSubmit(mode) {
+  const isDraft = mode === 'draft';
 
-  if (remainingToday !== null && remainingToday <= 0) {
+  if (!isDraft && remainingToday !== null && remainingToday <= 0) {
     showStatus('Bugünkü gönderme hakkını kullandın. Hakkın gece yarısı (Türkiye saati) yenilenir.', 'err');
     return;
   }
@@ -213,9 +215,14 @@ form.addEventListener('submit', async (e) => {
     return;
   }
   const captionValue = document.getElementById('caption').value.trim();
-  if (!captionValue) {
+  if (!isDraft && !captionValue) {
     showStatus('Açıklama yazman zorunlu.', 'err');
     document.getElementById('caption').focus();
+    return;
+  }
+  const tagList = window.uploadTags ? window.uploadTags.getTags() : [];
+  if (!isDraft && tagList.length < 1) {
+    showStatus('En az 1 etiket seçmelisin (sık kullanılanlardan seçebilir ya da kendin yazabilirsin).', 'err');
     return;
   }
   if (!config || !config.cloudName) {
@@ -272,6 +279,7 @@ form.addEventListener('submit', async (e) => {
     submitBtn.disabled = true;
   }
 
+  draftBtn.disabled = true;
   submitBtn.textContent = 'Yükleniyor…';
   progressBar.style.display = 'block';
   showStatus('Medya yükleniyor, lütfen bekle…', 'info');
@@ -291,7 +299,7 @@ form.addEventListener('submit', async (e) => {
       throw new Error(cloudResult.error?.message || 'Yükleme başarısız oldu.');
     }
 
-    submitBtn.textContent = 'Onaya gönderiliyor…';
+    submitBtn.textContent = isDraft ? 'Taslak kaydediliyor…' : 'Onaya gönderiliyor…';
 
     let finalUrl = cloudResult.secure_url;
     let durationSec = cloudResult.duration || null;
@@ -305,7 +313,7 @@ form.addEventListener('submit', async (e) => {
       trimmed = true;
     }
 
-    const res = await fetch('/api/submit', {
+    const res = await fetch(isDraft ? '/api/drafts' : '/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -316,6 +324,7 @@ form.addEventListener('submit', async (e) => {
         durationSec,
         trimmed,
         caption: captionValue,
+        tags: tagList,
       }),
     });
 
@@ -327,8 +336,14 @@ form.addEventListener('submit', async (e) => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Kayıt başarısız oldu.');
 
-    showStatus('Teşekkürler! Anın admin onayına gönderildi. Onaylandığında ana sayfada görünecek. 🎉', 'ok');
+    showStatus(
+      isDraft
+        ? 'Taslağın kaydedildi 📝 Profilim → Taslaklarım bölümünden istediğin zaman paylaşabilirsin.'
+        : 'Teşekkürler! Anın admin onayına gönderildi. Onaylandığında ana sayfada görünecek. 🎉',
+      'ok'
+    );
     form.reset();
+    if (window.uploadTags) window.uploadTags.setTags([]);
     filenameEl.textContent = '';
     selectedFile = null;
     videoDuration = null;
@@ -337,25 +352,34 @@ form.addEventListener('submit', async (e) => {
     progressBar.style.display = 'none';
     progressSpan.style.width = '0%';
 
-    if (typeof remainingToday === 'number' && !(myLimits && myLimits.unlimited)) {
+    if (!isDraft && typeof remainingToday === 'number' && !(myLimits && myLimits.unlimited)) {
       remainingToday -= 1;
       if (remainingToday <= 0) {
         quotaInfo.textContent = 'Bugünkü gönderme hakkını kullandın. Hakkın gece yarısı (Türkiye saati) yenilenir.';
         submitBtn.textContent = 'Bugünlük hakkın doldu';
         submitBtn.disabled = true;
+        draftBtn.disabled = false;
         return;
       }
       quotaInfo.textContent = `Bugün için ${remainingToday} gönderme hakkın kaldı.`;
     }
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Onaya Gönder';
+    submitBtn.disabled = remainingToday !== null && remainingToday <= 0;
+    submitBtn.textContent = submitBtn.disabled ? 'Bugünlük hakkın doldu' : 'Onaya Gönder';
+    draftBtn.disabled = false;
   } catch (err) {
     showStatus('Bir şeyler ters gitti: ' + err.message, 'err');
     progressBar.style.display = 'none';
     submitBtn.disabled = remainingToday !== null && remainingToday <= 0;
     submitBtn.textContent = submitBtn.disabled ? 'Bugünlük hakkın doldu' : 'Onaya Gönder';
+    draftBtn.disabled = false;
   }
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  handleSubmit('submit');
 });
+draftBtn.addEventListener('click', () => handleSubmit('draft'));
 
 function uploadWithProgress(url, formData, onProgress) {
   return new Promise((resolve, reject) => {

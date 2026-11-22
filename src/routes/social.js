@@ -1,4 +1,4 @@
-// Anı sayfası (/m/:id), yorumlar, emoji tepkileri ve rastgele anı.
+// Anı sayfası (/m/:id), yorumlar (yanıt zinciri + sabitleme), emoji tepkileri ve rastgele anı.
 const core = require('../core');
 const { app, asyncRoute, requireUserApi, createRateLimiter, db, users, likes, renderNameHtml, ROOT } = core;
 const path = require('path');
@@ -7,6 +7,7 @@ const { notify } = require('../notify');
 const { renderRich, extractMentions } = require('../lib/richtext');
 const { cloudImg, videoPoster } = require('../lib/cloud');
 const { invalidateSnapshot } = require('../snapshot');
+const { buildThread, countThread } = require('../lib/threads');
 
 app.locals.renderRich = renderRich;
 app.locals.cloudImg = cloudImg;
@@ -21,6 +22,7 @@ function viewer(req) {
   };
 }
 
+// Düz yorum listesi -> gösterime hazır alanlar (üst yorum / yanıt ayrımı, sabitleme yetkisi)
 async function serializeComments(rows, v, ownerId) {
   const authors = await users.getUsersByIds(rows.map((r) => r.userId));
   return rows.map((r) => {
@@ -29,13 +31,18 @@ async function serializeComments(rows, v, ownerId) {
     return {
       id: r.id,
       userId: r.userId,
+      parentId: r.parentId || null,
+      pinnedAt: r.pinnedAt || null,
       username: name,
       avatarUrl: a ? a.avatarUrl : null,
       nameHtml: renderNameHtml(name, a && a.nameStyle),
       bodyHtml: renderRich(r.body),
       createdAt: r.createdAt,
+      byOwner: !!ownerId && r.userId === ownerId, // yorumu anı sahibi yazdı
       isMine: !!v.id && v.id === r.userId,
       canDelete: v.isSuper || (!!v.id && (v.id === r.userId || v.id === ownerId)),
+      // yalnızca anı sahibi (ya da süper admin) ÜST yorumlardan birini sabitleyebilir
+      canPin: !r.parentId && (v.isSuper || (!!v.id && v.id === ownerId)),
     };
   });
 }
@@ -46,7 +53,8 @@ app.get(
   asyncRoute(async (req, res) => {
     const v = viewer(req);
     const item = await db.getItemById(req.params.id);
-    const allowed = item && (item.status === 'approved' || v.isSuper || (v.id && v.id === item.userId));
+    // Taslaklar kimseye (sahibine bile) anı sayfası olarak açılmaz
+    const allowed = item && item.status !== 'draft' && (item.status === 'approved' || v.isSuper || (v.id && v.id === item.userId));
     if (!allowed) return res.status(404).sendFile(path.join(ROOT, 'public', '404.html'));
 
     const [owner, likeTotal, likedSet, reactions, commentRows, me] = await Promise.all([
@@ -58,21 +66,24 @@ app.get(
       v.id ? users.findUserById(v.id) : Promise.resolve(null),
     ]);
     const ownerInfo = owner[item.userId] || { username: item.uploaderName, avatarUrl: null, nameStyle: null };
-    const comments = await serializeComments(commentRows, v, item.userId);
+    const thread = buildThread(await serializeComments(commentRows, v, item.userId));
 
     const base = `${req.protocol}://${req.get('host')}`;
     const ogImage = item.type === 'video' ? videoPoster(item.url, 1200) : cloudImg(item.url, 1200);
     res.render('memory', {
       item,
+      tags: item.tags || [],
       owner: ownerInfo,
       ownerNameHtml: renderNameHtml(ownerInfo.username, ownerInfo.nameStyle),
       likeTotal,
       likedByMe: likedSet.has(item.id),
       reactions,
       EMOJIS: social.EMOJIS,
-      comments,
+      comments: thread,
+      commentTotal: countThread(thread),
       loggedIn: !!v.id,
       isOwner: !!v.id && v.id === item.userId,
+      isPinnedOnProfile: !!(me && me.pinnedItemId === item.id),
       canInteract: !!v.id && !(me && me.banned),
       pageUrl: `${base}/m/${item.id}`,
       ogImage,
@@ -97,8 +108,8 @@ app.get(
   asyncRoute(async (req, res) => {
     const item = await db.getItemById(req.params.id);
     if (!item || item.status !== 'approved') return res.status(404).json({ error: 'Bulunamadı.' });
-    const rows = await social.listComments(item.id);
-    res.json({ comments: await serializeComments(rows, viewer(req), item.userId) });
+    const thread = buildThread(await serializeComments(await social.listComments(item.id), viewer(req), item.userId));
+    res.json({ comments: thread, total: countThread(thread) });
   })
 );
 
@@ -116,16 +127,31 @@ app.post(
     if (body.length < 1) return res.status(400).json({ error: 'Yorum boş olamaz.' });
     if (body.length > 300) return res.status(400).json({ error: 'Yorum en fazla 300 karakter olabilir.' });
 
-    const c = await social.addComment({ itemId: item.id, userId: me.id, body });
+    // Yanıt: tek seviye — bir yanıta yanıt verilirse aynı üst yorumun altına eklenir
+    let parent = null;
+    let rootId = null;
+    if (req.body.parentId) {
+      parent = await social.getComment(Number(req.body.parentId));
+      if (!parent || parent.itemId !== item.id) return res.status(404).json({ error: 'Yanıt verilen yorum bulunamadı.' });
+      rootId = parent.parentId || parent.id;
+    }
+
+    const c = await social.addComment({ itemId: item.id, userId: me.id, body, parentId: rootId });
     invalidateSnapshot();
 
     const snippet = body.slice(0, 60);
-    if (item.userId && item.userId !== me.id) {
+    const notified = new Set([me.id]);
+    if (parent && parent.userId !== me.id) {
+      notified.add(parent.userId);
+      notify(parent.userId, { type: 'comment', text: `${me.username} yorumuna yanıt verdi: “${snippet}”`, link: `/m/${item.id}#comments`, dedupeKey: `reply:${c.id}` });
+    }
+    if (item.userId && !notified.has(item.userId)) {
+      notified.add(item.userId);
       notify(item.userId, { type: 'comment', text: `${me.username} anına yorum yaptı: “${snippet}”`, link: `/m/${item.id}#comments`, dedupeKey: `comment:${c.id}` });
     }
     try {
       for (const u of await users.findUsersByUsernames(extractMentions(body))) {
-        if (u.id === me.id || u.id === item.userId) continue;
+        if (notified.has(u.id)) continue;
         notify(u.id, { type: 'mention', text: `${me.username} bir yorumda seni etiketledi: “${snippet}”`, link: `/m/${item.id}#comments`, dedupeKey: `cmention:${c.id}:${u.id}` });
       }
     } catch {
@@ -133,7 +159,7 @@ app.post(
     }
 
     const [out] = await serializeComments([c], viewer(req), item.userId);
-    res.json({ ok: true, comment: out });
+    res.json({ ok: true, comment: { ...out, replies: [] } });
   })
 );
 
@@ -147,13 +173,44 @@ app.post(
     const v = viewer(req);
     const allowed = v.isSuper || v.id === c.userId || (item && item.userId === v.id);
     if (!allowed) return res.status(403).json({ error: 'Bu yorumu silme yetkin yok.' });
-    await social.deleteComment(c.id);
+    await social.deleteComment(c.id); // yanıtları da silinir
     invalidateSnapshot();
     res.json({ ok: true });
   })
 );
 
+// ---------- Yorumu sabitle / kaldır (yalnızca anı sahibi; bir anıda en fazla 1 sabit yorum) ----------
+app.post(
+  '/api/comments/:id/pin',
+  requireUserApi,
+  asyncRoute(async (req, res) => {
+    const c = await social.getComment(Number(req.params.id));
+    if (!c) return res.status(404).json({ error: 'Bulunamadı.' });
+    const item = await db.getItemById(c.itemId);
+    if (!item || item.status !== 'approved') return res.status(404).json({ error: 'Bulunamadı.' });
+    const v = viewer(req);
+    if (!(v.isSuper || (v.id && v.id === item.userId))) return res.status(403).json({ error: 'Yorumları yalnızca anı sahibi sabitleyebilir.' });
+    if (c.parentId) return res.status(400).json({ error: 'Yalnızca ana yorumlar sabitlenebilir.' });
+
+    const pin = req.body.pinned !== false;
+    await social.setPinned(item.id, pin ? c.id : null);
+    if (pin && c.userId !== v.id) {
+      notify(c.userId, { type: 'comment', text: 'Yorumun anı sahibi tarafından en üste sabitlendi 📌', link: `/m/${item.id}#comments`, dedupeKey: `pin:${c.id}` });
+    }
+    res.json({ ok: true, pinned: pin });
+  })
+);
+
 // ---------- Emoji tepkileri ----------
+app.get(
+  '/api/memory/:id/reactions',
+  asyncRoute(async (req, res) => {
+    const item = await db.getItemById(req.params.id);
+    if (!item || item.status !== 'approved') return res.status(404).json({ error: 'Bulunamadı.' });
+    res.json(await social.reactionSummary(item.id, viewer(req).id));
+  })
+);
+
 app.post(
   '/api/memory/:id/react',
   requireUserApi,
@@ -168,6 +225,7 @@ app.post(
     if (me.banned) return res.status(403).json({ error: 'Hesabının etkileşim yetkisi kaldırılmış.' });
 
     const r = await social.toggleReaction(item.id, me.id, emoji);
+    invalidateSnapshot(); // kartlardaki "en çok verilen 2 tepki" güncel kalsın
     if (r.active && item.userId && item.userId !== me.id) {
       notify(item.userId, { type: 'reaction', text: `${me.username} anına ${emoji} tepkisi verdi`, link: `/m/${item.id}`, dedupeKey: `react:${item.id}:${me.id}:${emoji}` });
     }

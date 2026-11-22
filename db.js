@@ -92,7 +92,7 @@ async function approveItem(id) {
 }
 
 async function getItemsByUserId(userId) {
-  const rows = await fetchAll(supabase, 'items', '*', (q) => q.eq('user_id', userId).is('deleted_at', null).order('created_at', { ascending: false }).order('id'));
+  const rows = await fetchAll(supabase, 'items', '*', (q) => q.eq('user_id', userId).is('deleted_at', null).neq('status', 'draft').order('created_at', { ascending: false }).order('id'));
   return rows.map(fromRow);
 }
 
@@ -159,10 +159,58 @@ async function hardDeleteItem(id) {
   if (error) throw error;
 }
 
+// ---------- Taslaklar (status = 'draft'): yayınlanana kadar kimseye görünmez, günlük hakka sayılmaz ----------
+async function getDraftsByUserId(userId) {
+  const { data, error } = await supabase.from('items').select('*').eq('user_id', userId).eq('status', 'draft').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(fromRow);
+}
+async function countDrafts(userId) {
+  const { count, error } = await supabase.from('items').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'draft');
+  if (error) throw error;
+  return count || 0;
+}
+async function getDraft(id, userId) {
+  const { data, error } = await supabase.from('items').select('*').eq('id', id).eq('user_id', userId).eq('status', 'draft').maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data) : null;
+}
+async function updateDraft(id, userId, { caption, tags }) {
+  const { error } = await supabase.from('items').update({ caption, tags }).eq('id', id).eq('user_id', userId).eq('status', 'draft');
+  if (error) throw error;
+}
+// Yayınlar: taslak -> onay bekleyen; sıralamada yeni görünsün diye tarih güncellenir. Taslak değilse false.
+async function publishDraft(id, userId) {
+  const { data, error } = await supabase
+    .from('items')
+    .update({ status: 'pending', created_at: Date.now() })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .eq('status', 'draft')
+    .select('id');
+  if (error) throw error;
+  return (data || []).length === 1;
+}
+async function deleteDraft(id, userId) {
+  const { error } = await supabase.from('items').delete().eq('id', id).eq('user_id', userId).eq('status', 'draft');
+  if (error) throw error;
+}
+async function getExpiredDrafts(cutoffMs) {
+  const rows = await fetchAll(supabase, 'items', '*', (q) => q.eq('status', 'draft').lt('created_at', cutoffMs).order('id'));
+  return rows.map(fromRow);
+}
+
 module.exports = {
   getPendingItems,
   getApprovedItems,
   listApprovedPage,
+  getDraftsByUserId,
+  countDrafts,
+  getDraft,
+  updateDraft,
+  publishDraft,
+  deleteDraft,
+  getExpiredDrafts,
   getApprovedCount,
   getItemById,
   getPendingItemsByIp,

@@ -50,6 +50,12 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
 - 🎁 Kişisel **yıl özeti** (anı/beğeni/yorum sayıları, en çok beğenilen anın, en aktif ayın…) ve hikaye boyutunda paylaşım kartı
 - 📲 Ana ekrana eklenebilir (PWA) ve **telefona bildirim** (onay, yorum, etiket…) — bildirim çanından cihaz başına açılır/kapanır
 - 🌴 **GTA 6 teması** herkese açık (profil → Görünüm); diğer temalar ÖZEL/Plus üyelere özel
+- 🔖 **Koleksiyonlar:** anıları kendi özel listelerine ("Favoriler", "Komik Anlar"…) kaydet, sonra tek yerden bul
+- 💬 Yorumlara **yanıt zinciri**; anı sahibi bir yorumu en üste **sabitleyebilir**
+- 📌 Profilinde bir anıyı **vitrin anısı** yap — ziyaretçiler önce onu görür
+- 📝 **Taslaklar:** hazırladığın anıyı yayınlamadan sakla, sonra paylaş (günlük hakka yayınlarken sayılır)
+- 😊 Emoji tepkileri bir tuşla açılan seçiciyle; her kartta en çok verilen 2 emoji görünür
+- 🏷️ Her anıda en az 1 etiket zorunlu; "sık kullanılanlar" gerçek kullanımdan gelir (`#croshy` kullanılamaz)
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**

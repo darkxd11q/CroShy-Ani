@@ -177,6 +177,7 @@
                 <%= item.status === 'approved' ? '✓ Onaylı' : '⏳ Bekliyor' %>
               </span>
               <span class="profile-item-likes">❤️ <%= item.likes %></span>
+              <% if (item.status === 'approved') { %><button type="button" class="profile-item-pin <%= item.id === locals.pinnedItemId ? 'is-pinned' : '' %>" data-pin="<%= item.id %>" data-pinned="<%= item.id === locals.pinnedItemId ? '1' : '0' %>" aria-label="<%= item.id === locals.pinnedItemId ? 'Vitrinden kaldır' : 'Vitrin anısı yap' %>" title="<%= item.id === locals.pinnedItemId ? 'Vitrinden kaldır' : 'Profilinde en üstte göster' %>">📌</button><% } %>
               <form method="POST" action="/profile/delete/<%= item.id %>" onsubmit="return confirm('Bu anıyı silmek istediğine emin misin? Bu işlem geri alınamaz.');" style="position:absolute; top:6px; right:6px; margin:0;">
                 <button type="submit" class="profile-item-delete" aria-label="Sil">✕</button>
               </form>
@@ -185,6 +186,15 @@
         </div>
       <% } %>
     
+      </div>
+    </details>
+
+    <details class="acc" id="acc-taslaklar">
+      <summary class="acc-summary"><span>📝 Taslaklarım <span id="draftCount"></span></span><span class="acc-hint">Kaydet, sonra paylaş</span></summary>
+      <div class="acc-body">
+        <p class="profile-section-sub">Henüz yayınlamadığın anılar burada bekler (en fazla 10; 30 gün sonra silinir). Bir taslağı paylaşmak günlük hakkından düşer — hakkın dolmuşsa yarın paylaşabilirsin.</p>
+        <div id="draftList" class="draft-list" aria-live="polite"></div>
+        <a class="btn small" href="/upload">+ Yeni anı / taslak</a>
       </div>
     </details>
 
@@ -348,6 +358,9 @@
     </div>
   </div>
   <script>window.AVATAR_CFG = { canGif: <%= locals.canGif ? 'true' : 'false' %>, maxBytes: 5242880, maxGifBytes: 8388608 };</script>
+  <script src="/js/tag-input.js"></script>
+  <script src="/js/drafts.js"></script>
+  <script src="/js/pin.js"></script>
   <script src="/js/profile-accordion.js"></script>
   <script src="/js/name-style-editor.js"></script>
   <script src="/js/cloud-upload.js"></script>

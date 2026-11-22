@@ -100,7 +100,7 @@ window.getSessionStatus =
     lo.textContent = '🚪 Çıkış yap';
     logout.appendChild(lo);
 
-    panel.append(item('/profile', '👤 Profilim'), item('/u/' + encodeURIComponent(name), '🌐 Herkese açık profilim'), item('/redeem', '🎟️ Kod kullan'), item('/yilim', '🎁 Yıl özetim'), sep(), logout);
+    panel.append(item('/profile', '👤 Profilim'), item('/koleksiyonlar', '🔖 Kaydettiklerim'), item('/u/' + encodeURIComponent(name), '🌐 Herkese açık profilim'), item('/redeem', '🎟️ Kod kullan'), item('/yilim', '🎁 Yıl özetim'), sep(), logout);
     root.append(btn, panel);
 
     const items = () => [...panel.querySelectorAll('[role="menuitem"]')];

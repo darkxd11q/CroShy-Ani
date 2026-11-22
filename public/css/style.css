@@ -1824,3 +1824,109 @@ a.notif-item:hover { background: rgba(255,255,255,.05); }
 :root.theme-gta .btn.primary:hover { box-shadow: 0 14px 34px -8px rgba(243, 106, 120, 0.6); }
 :root.theme-gta .gradient-text { background-image: linear-gradient(100deg, #C9349B, #F36A78 40%, #FF9B55 72%, #FFB458); }
 :root.theme-gta ::selection { background: #C9349B; color: #fff; }
+
+
+/* ==================== Etiket girişi ==================== */
+.tag-input .tag-box { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid var(--card-border); }
+.tag-input .tag-box:focus-within { border-color: var(--accent-1); }
+.tag-input input { flex: 1; min-width: 140px; background: transparent; border: none; outline: none; color: var(--text); font: inherit; font-size: .9rem; padding: 4px; }
+.tag-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 11px; border-radius: 999px; font-size: .82rem; font-weight: 600; background: linear-gradient(120deg, rgba(139,92,246,.35), rgba(236,72,153,.28)); border: 1px solid var(--card-border); }
+.tag-chip button { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: .72rem; padding: 0 4px; }
+.tag-chip button:hover { color: var(--text); }
+.tag-msg { min-height: 1.1em; margin-top: 6px; font-size: .78rem; color: #fda4af; }
+.tag-suggest { margin-top: 8px; }
+.tag-suggest[hidden] { display: none; }
+.tag-suggest-title { display: block; font-size: .76rem; color: var(--text-dim); margin-bottom: 6px; }
+
+/* ==================== Galeri kartı: en çok verilen 2 tepki + araçlar ==================== */
+.memory-card .top-reactions { position: absolute; top: 16px; left: 16px; z-index: 1; display: flex; gap: 6px; }
+.memory-card .top-reactions span { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: .72rem; background: rgba(0,0,0,.5); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.16); color: #fff; }
+.memory-card .top-reactions b { font-weight: 600; font-size: .68rem; opacity: .9; }
+.card-tools { position: absolute; right: 18px; bottom: 64px; z-index: 2; display: flex; flex-direction: column; gap: 8px; }
+.card-tool { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; cursor: pointer; color: #fff; background: rgba(0,0,0,.5); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.18); transition: transform .2s ease, background .2s ease; }
+.card-tool:hover { transform: scale(1.08); background: rgba(0,0,0,.68); }
+.card-tool.saved { background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); border-color: transparent; }
+
+/* ==================== Tepki seçici / kaydet menüsü ==================== */
+.react-pop, .save-pop { position: fixed; z-index: 940; border-radius: 18px; background: rgba(16,14,24,.98); border: 1px solid var(--card-border); box-shadow: 0 24px 70px -20px rgba(0,0,0,.85); backdrop-filter: blur(14px); animation: fadeUp .18s ease both; }
+.react-pop { width: 252px; padding: 10px; }
+.react-pop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.react-pick { font-size: 1.45rem; padding: 8px 0; border-radius: 12px; border: 1px solid transparent; background: rgba(255,255,255,.05); cursor: pointer; transition: transform .12s ease; }
+.react-pick:hover { transform: scale(1.18); background: rgba(255,255,255,.12); }
+.react-pick.active { border-color: var(--accent-2); background: rgba(255,255,255,.14); }
+.save-pop { width: 270px; padding: 12px; max-height: 320px; overflow-y: auto; }
+.save-title { font-family: var(--font-head); font-weight: 700; margin-bottom: 8px; }
+.save-rows { display: flex; flex-direction: column; gap: 4px; }
+.save-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 12px; border: 1px solid transparent; background: rgba(255,255,255,.04); color: var(--text); font: inherit; font-size: .86rem; cursor: pointer; text-align: left; }
+.save-row:hover { background: rgba(255,255,255,.09); }
+.save-row.on { border-color: var(--accent-1); background: rgba(139,92,246,.18); }
+.save-check { width: 18px; height: 18px; border-radius: 6px; border: 1px solid var(--card-border); display: inline-flex; align-items: center; justify-content: center; font-size: .75rem; flex-shrink: 0; }
+.save-row.on .save-check { background: var(--accent-1); border-color: transparent; }
+.save-name { flex: 1; overflow-wrap: anywhere; }
+.save-row small { color: var(--text-dim); }
+.save-empty, .save-msg { font-size: .8rem; color: var(--text-dim); padding: 6px 2px; }
+.save-msg { color: #fda4af; min-height: 1em; }
+.save-create { display: flex; gap: 6px; margin-top: 8px; }
+.save-create input { flex: 1; min-width: 0; font: inherit; font-size: .84rem; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--card-border); color: var(--text); }
+.save-link { display: block; margin-top: 10px; font-size: .78rem; color: var(--accent-3); }
+
+/* ==================== Anı sayfası: etiketler, tepki çipleri, kaydet ==================== */
+.memory-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 14px; }
+.react-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.react-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; cursor: pointer; font: inherit; font-size: .85rem; color: var(--text); background: rgba(255,255,255,.05); border: 1px solid var(--card-border); }
+.react-chip:hover { border-color: var(--accent-1); }
+.react-chip.active { border-color: var(--accent-2); background: rgba(255,255,255,.12); }
+#saveBtn.saved { border-color: var(--accent-1); background: rgba(139,92,246,.25); }
+
+/* ==================== Yorum zinciri + sabitleme ==================== */
+.comment.is-pinned > .comment-main { padding: 10px 12px; border-radius: 14px; background: rgba(251,191,36,.07); border: 1px solid rgba(251,191,36,.28); }
+.comment-pinned-label { font-size: .74rem; font-weight: 700; color: #fcd34d; margin-bottom: 4px; }
+.comment-owner-tag { font-size: .68rem; padding: 1px 8px; border-radius: 999px; background: rgba(139,92,246,.3); border: 1px solid var(--card-border); }
+.comment-actions { display: flex; gap: 12px; margin-top: 4px; }
+.comment-act { border: none; background: transparent; color: var(--text-dim); font: inherit; font-size: .76rem; cursor: pointer; padding: 2px 0; }
+.comment-act:hover { color: var(--text); }
+.replies { list-style: none; margin: 10px 0 0; padding: 0 0 0 14px; border-left: 2px solid var(--card-border); display: flex; flex-direction: column; gap: 12px; }
+.replies:empty { display: none; }
+.comment.is-reply .comment-avatar { width: 26px; height: 26px; font-size: .75rem; }
+.reply-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.reply-form textarea { width: 100%; resize: vertical; padding: 10px 12px; border-radius: 12px; font: inherit; font-size: .88rem; background: rgba(255,255,255,.04); border: 1px solid var(--card-border); color: var(--text); outline: none; }
+.reply-form .comment-form-row { display: flex; gap: 8px; align-items: center; }
+.reply-form .fb-status { margin-right: auto; }
+
+/* ==================== Taslaklar ==================== */
+.draft-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: 14px; }
+.draft-card { display: flex; gap: 14px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,.04); border: 1px solid var(--card-border); }
+.draft-media { position: relative; flex: 0 0 110px; }
+.draft-media img { width: 110px; height: 110px; object-fit: cover; border-radius: 12px; display: block; }
+.draft-play { position: absolute; top: 6px; right: 6px; padding: 1px 7px; border-radius: 999px; background: rgba(0,0,0,.55); font-size: .7rem; }
+.draft-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.draft-body textarea { width: 100%; resize: vertical; padding: 10px 12px; border-radius: 12px; font: inherit; font-size: .88rem; background: rgba(255,255,255,.04); border: 1px solid var(--card-border); color: var(--text); outline: none; }
+.draft-expiry { color: var(--text-dim); font-size: .72rem; }
+.draft-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.draft-msg { min-height: 1em; font-size: .8rem; }
+.draft-msg.ok { color: #86efac; }
+.draft-msg.err { color: #fda4af; }
+@media (max-width: 560px) { .draft-card { flex-direction: column; } .draft-media, .draft-media img { flex: none; width: 100%; height: auto; max-height: 220px; } }
+
+/* ==================== Vitrin anısı (profil) + 📌 düğmesi ==================== */
+.pinned-memory { margin-bottom: 26px; }
+.pinned-card { position: relative; display: block; border-radius: 24px; overflow: hidden; border: 1px solid var(--accent-1); box-shadow: 0 24px 60px -28px rgba(139,92,246,.7); }
+.pinned-card img { width: 100%; max-height: 460px; object-fit: cover; display: block; }
+.pinned-play { position: absolute; top: 14px; right: 14px; padding: 4px 12px; border-radius: 999px; background: rgba(0,0,0,.55); font-size: .8rem; }
+.pinned-meta { display: block; padding: 14px 18px; font-size: .95rem; line-height: 1.5; background: linear-gradient(180deg, rgba(0,0,0,.2), rgba(0,0,0,.55)); }
+.pinned-meta small { color: var(--text-dim); margin-left: 8px; }
+.profile-item-pin { position: absolute; top: 6px; left: 6px; z-index: 3; width: 28px; height: 28px; border-radius: 50%; border: none; cursor: pointer; background: rgba(0,0,0,.55); color: #fff; font-size: .85rem; opacity: .75; }
+.profile-item-pin:hover { opacity: 1; }
+.profile-item-pin.is-pinned { opacity: 1; background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); }
+
+/* ==================== Koleksiyonlar ==================== */
+.collections-page { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
+.collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; margin-top: 18px; }
+.collection-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 20px; background: rgba(255,255,255,.05); border: 1px solid var(--card-border); transition: transform .2s ease; }
+.collection-card:hover { transform: translateY(-3px); }
+.collection-mosaic { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; border-radius: 14px; overflow: hidden; aspect-ratio: 1; }
+.collection-mosaic img, .collection-empty { width: 100%; height: 100%; object-fit: cover; background: rgba(255,255,255,.06); display: block; }
+.collection-name { font-family: var(--font-head); font-weight: 700; padding: 4px 4px 0; overflow-wrap: anywhere; }
+.collection-card small { color: var(--text-dim); padding: 0 4px 4px; }
+.collection-item { position: relative; }
+.collection-remove { position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; cursor: pointer; background: rgba(0,0,0,.6); color: #fff; }

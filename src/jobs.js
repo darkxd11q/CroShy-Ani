@@ -9,6 +9,8 @@ const users = require('../users');
 const { notify } = require('./notify');
 const { purgeOrphanUploads } = require('./orphans');
 const audit = require('./audit');
+const dbDrafts = require('../db');
+const cloudinaryLib = require('cloudinary').v2;
 const rateState = require('../rateState');
 const notificationsDb = require('../notifications');
 
@@ -37,6 +39,24 @@ async function purgeExpiredBadges() {
   }
 }
 
+// 30 günü geçen taslaklar (Cloudinary dosyasıyla birlikte) silinir
+async function purgeExpiredDrafts() {
+  try {
+    const old = await dbDrafts.getExpiredDrafts(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    for (const d of old) {
+      try {
+        await cloudinaryLib.uploader.destroy(d.publicId, { resource_type: d.type === 'video' ? 'video' : 'image' });
+      } catch (e) {
+        console.error('Taslak Cloudinary silme hatası:', e.message);
+      }
+      await dbDrafts.deleteDraft(d.id, d.userId);
+    }
+    if (old.length) console.log(`🧹 ${old.length} süresi dolan taslak silindi.`);
+  } catch (e) {
+    console.error('Taslak temizliği hatası:', e.message);
+  }
+}
+
 function startJobs() {
   const every = (ms, fn, firstMs = 20 * 1000) => {
     setTimeout(fn, firstMs).unref();
@@ -54,6 +74,7 @@ function startJobs() {
   every(60 * 60 * 1000, () => require('../rememberTokens').purgeExpired().catch((e) => console.error('Belirteç temizliği:', e.message)), 150 * 1000);
   every(24 * 60 * 60 * 1000, () => notificationsDb.purgeOld().catch((e) => console.error('Bildirim temizliği:', e.message)), 4 * 60 * 1000);
   every(60 * 60 * 1000, () => rateState.purgeExpired(), 200 * 1000);
+  every(24 * 60 * 60 * 1000, purgeExpiredDrafts, 6 * 60 * 1000);
   // <JOBS>
 }
 

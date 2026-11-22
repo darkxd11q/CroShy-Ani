@@ -27,18 +27,23 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
     calls.push({ url, body: opts.body });
     if (mode[url]) return mode[url];
     if (url === '/api/like/abc') return resp(200, { liked: false, count: 2 });
+    if (url === '/api/memory/abc/reactions') return resp(200, { counts: { '😂': 2 }, mine: ['😂'] });
     if (url === '/api/memory/abc/react') return resp(200, { ok: true, summary: { counts: { '🔥': 1, '😂': 2 }, mine: ['🔥'] } });
     if (url === '/api/memory/abc/comments') return resp(200, { ok: true, comment: { id: 9, username: 'ben', avatarUrl: null, nameHtml: 'ben', bodyHtml: 'merhaba &lt;script&gt;x&lt;/script&gt; <a class="tag-link" href="/?tag=x">#x</a>', createdAt: Date.now(), canDelete: true } });
     if (url === '/api/comments/9/delete') return resp(200, { ok: true });
     return resp(200, {});
   };
+  w.eval(fs.readFileSync(P + '/public/js/reaction-picker.js', 'utf8'));
+  w.eval(fs.readFileSync(P + '/public/js/save-menu.js', 'utf8'));
   w.eval(fs.readFileSync(P + '/public/js/memory-page.js', 'utf8'));
   const $ = (s) => w.document.querySelector(s);
 
   $('#memoryLike').click(); await tick();
   check('[anı] beğeniyi geri alınca sayı 2, kalp 🤍, aria-pressed=false', $('#likeCount').textContent === '2' && $('#memoryLike .heart').textContent === '🤍' && $('#memoryLike').getAttribute('aria-pressed') === 'false');
-  $('.react-btn[data-emoji="🔥"]').click(); await tick();
-  check('[anı] 🔥 tepkisi aktif, sayılar güncellendi, 😂 pasif', $('.react-btn[data-emoji="🔥"]').classList.contains('active') && $('.react-btn[data-emoji="🔥"] .react-count').textContent === '1' && !$('.react-btn[data-emoji="😂"]').classList.contains('active') && $('.react-btn[data-emoji="😂"] .react-count').textContent === '2');
+  $('#reactOpen').click(); await tick();
+  check('[anı] "Tepki ver" tuşu 16 emojilik seçiciyi açtı; verdiğim 😂 işaretli', w.document.querySelectorAll('.react-pop .react-pick').length === 16 && !!w.document.querySelector('.react-pick[data-emoji="😂"].active'));
+  w.document.querySelector('.react-pick[data-emoji="🔥"]').click(); await tick();
+  check('[anı] 🔥 seçilince çipler güncellendi (🔥 aktif/1, 😂 pasif/2) ve seçici kapandı', $('#reactChips .react-chip[data-emoji="🔥"]').classList.contains('active') && $('#reactChips .react-chip[data-emoji="🔥"] .react-count').textContent === '1' && !$('#reactChips .react-chip[data-emoji="😂"]').classList.contains('active') && $('#reactChips .react-chip[data-emoji="😂"] .react-count').textContent === '2' && !w.document.querySelector('.react-pop'));
   check('[anı] tepki isteği doğru emojiyi gönderdi', calls.some((c) => c.url === '/api/memory/abc/react' && JSON.parse(c.body).emoji === '🔥'));
 
   $('#commentBody').value = 'merhaba <script>x</script> #x';
@@ -85,7 +90,7 @@ const resp = (status, body) => ({ ok: status < 400, status, json: async () => bo
   check('[menü] hesap menüsü başta kapalı, düğme ayse yazıyor', menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'false' && /ayse/.test(menuBtn.textContent));
   menuBtn.click();
   const mi = [...menuPanel.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent.trim());
-  check('[menü] tek tuşla açıldı: Profilim, Herkese açık profilim, Kod, Çıkış', !menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'true' && mi.length === 5 && /Profilim/.test(mi[0]) && /Herkese açık/.test(mi[1]) && /Kod/.test(mi[2]) && /Yıl özetim/.test(mi[3]) && /Çıkış/.test(mi[4]), mi.join(' | '));
+  check('[menü] tek tuşla açıldı: Profilim, Herkese açık profilim, Kod, Çıkış', !menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'true' && mi.length === 6 && /Profilim/.test(mi[0]) && /Kaydettiklerim/.test(mi[1]) && /Herkese açık/.test(mi[2]) && /Kod/.test(mi[3]) && /Yıl özetim/.test(mi[4]) && /Çıkış/.test(mi[5]), mi.join(' | '));
   check('[menü] bağlantılar doğru: /profile, /u/ayse, /redeem, POST /logout', menuPanel.querySelector('a[href="/profile"]') && menuPanel.querySelector('a[href="/u/ayse"]') && menuPanel.querySelector('a[href="/redeem"]') && menuPanel.querySelector('form[action="/logout"][method="post"]'));
   n.doc.dispatchEvent(new n.win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   check('[menü] Esc ile kapandı', menuPanel.hidden && menuBtn.getAttribute('aria-expanded') === 'false');

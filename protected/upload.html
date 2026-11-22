@@ -84,6 +84,11 @@
         </div>
 
         <div class="field">
+          <label>Etiketler <span style="color:var(--accent-2);">*</span> <small style="color:var(--text-dim); font-weight:400;">(en az 1, en fazla 5)</small></label>
+          <div id="tagInput"></div>
+        </div>
+
+        <div class="field">
           <label>Fotoğraf veya Video</label>
           <div class="dropzone" id="dropzone">
             <input type="file" id="fileInput" accept="image/*,video/*" />
@@ -122,6 +127,8 @@
         <button type="submit" class="btn primary" id="submitBtn" style="width:100%; justify-content:center;">
           Onaya Gönder
         </button>
+        <button type="button" class="btn" id="draftBtn" style="width:100%; justify-content:center; margin-top:10px;">💾 Taslak olarak kaydet</button>
+        <p style="text-align:center; margin-top:10px; font-size:.82rem;"><a href="/profile#acc-taslaklar" style="color:var(--accent-3);">📝 Taslaklarım</a> — hakkın dolsa da taslak kaydedebilir, sonra paylaşabilirsin.</p>
 
         <div class="status-msg" id="statusMsg"></div>
       </form>
@@ -136,6 +143,7 @@
   <script src="/js/auto-login-badge.js"></script>
   <script src="/js/compress.js"></script>
   <script src="/js/cloud-upload.js"></script>
+  <script src="/js/tag-input.js"></script>
   <script src="/js/upload.js"></script>
   <script src="/js/cookie-banner.js"></script>
 </body>

@@ -4,7 +4,7 @@ const coreAll = require('../core');
 const supabase_sb = require('../../supabaseClient');
 async function supabase_cleanup(userId) {
   // yorumlar, tepkiler, bildirimler: hesapla birlikte silinir
-  for (const t of ['comments', 'reactions', 'notifications', 'recovery_codes', 'push_subscriptions']) {
+  for (const t of ['comments', 'reactions', 'notifications', 'recovery_codes', 'push_subscriptions', 'collections']) {
     try {
       await supabase_sb.from(t).delete().eq('user_id', userId);
     } catch (e) {

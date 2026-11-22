@@ -4,6 +4,9 @@ const { notify } = require('../notify');
 const { nextMidnightTR } = require('../lib/time');
 const { getSnapshot, invalidateSnapshot, createBrowse, getBrowse, seenKeyFor } = require('../snapshot');
 const { extractTags } = require('../lib/richtext');
+const { collectTags } = require('../lib/tags');
+const { checkMedia } = require('../lib/mediaChecks');
+const collections = require('../../collections');
 
 // ---------- Herkese açık API ----------
 
@@ -68,13 +71,15 @@ app.get(
 
     const pageIds = browse.ids.slice(offset, offset + limit);
     const pageItems = pageIds.map((id) => snap.byId.get(id)).filter(Boolean);
-    const liked = uid ? await likes.getLikedSetForIp('u:' + uid) : new Set();
+    const [liked, saved] = uid
+      ? await Promise.all([likes.getLikedSetForIp('u:' + uid), collections.savedItemIds(uid).catch(() => new Set())])
+      : [new Set(), new Set()];
 
     // Bu sayfadaki anılar artık "görüldü" sayılır
     viewsStore.markSeen(pageIds, seenKey).catch((e) => console.error('markSeen hatası:', e.message));
 
     res.json({
-      items: pageItems.map((i) => ({ ...i, likedByMe: liked.has(i.id) })),
+      items: pageItems.map((i) => ({ ...i, likedByMe: liked.has(i.id), savedByMe: saved.has(i.id) })),
       total: browse.ids.length,
       offset,
       nextOffset: offset + pageIds.length,
@@ -164,85 +169,33 @@ app.post(
 
     if (usedToday >= limits.dailyLimit) {
       return res.status(429).json({
-        error: `Bugün için gönderme hakkını doldurdun (günde en fazla ${limits.dailyLimit} anı). Yarın tekrar deneyebilirsin.`,
+        error: `Bugün için gönderme hakkını doldurdun (günde en fazla ${limits.dailyLimit} anı). Hakkın gece yarısı (Türkiye saati) yenilenir; istersen taslak olarak kaydedebilirsin.`,
       });
     }
 
-    const { url, publicId, type, caption, bytes, durationSec, trimmed } = req.body;
-    const cleanCaption = (caption || '').toString().trim();
+    // Kaynak / boyut / süre doğrulaması (taslaklarla ORTAK); ihlalde yüklenen dosya Cloudinary'den de silinir
+    const bad = await checkMedia({ body: req.body, limits, cloudinary, formatDuration, ceilingBytes: ABSOLUTE_VIDEO_CEILING_BYTES, safeUrl: SAFE_CLOUD_URL });
+    if (bad) return res.status(bad.status).json({ error: bad.error });
 
-    if (!url || !publicId || !type) {
-      return res.status(400).json({ error: 'Eksik veri gönderildi.' });
-    }
-    if (type !== 'image' && type !== 'video') {
-      return res.status(400).json({ error: 'Geçersiz medya türü.' });
-    }
-    if (!SAFE_CLOUD_URL.test(url)) {
-      return res.status(400).json({ error: 'Geçersiz medya kaynağı.' });
-    }
-    if (!cleanCaption) {
-      // Boş açıklamayla gönderilen medyayı (client atlatılmış olsa bile)
-      // Cloudinary'den de sil, öylece Supabase dışında yetim kalmasın.
+    const { url, publicId, type, caption } = req.body;
+    const cleanCaption = (caption || '').toString().trim();
+    const kill = async (why) => {
       try {
         await cloudinary.uploader.destroy(publicId, { resource_type: type });
       } catch (e) {
-        console.error('Cloudinary silme hatası (açıklama yok):', e.message);
+        console.error(`Cloudinary silme hatası (${why}):`, e.message);
       }
+    };
+    if (!cleanCaption) {
+      await kill('açıklama yok');
       return res.status(400).json({ error: 'Açıklama yazman zorunlu.' });
     }
 
-    // Videolar artık tarayıcıda yeniden kodlanmıyor — kırpma Cloudinary'nin
-    // kendi (so_/du_) URL dönüşümüyle sunucu tarafında yapılıyor. Bu yüzden
-    // "trimmed" true ise "bytes" ORİJİNAL (henüz kırpılmamış) dosyanın
-    // boyutudur ve gerçekte servis edilecek klip çok daha küçük olacaktır —
-    // bu durumda normal boyut sınırı yerine, kötüye kullanımı önlemek için
-    // sadece makul bir üst tavan (ABSOLUTE_VIDEO_CEILING_BYTES) uygulanır.
-    if (!limits.unlimited && type === 'video' && trimmed && typeof bytes === 'number' && bytes > ABSOLUTE_VIDEO_CEILING_BYTES) {
-      try {
-        await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
-      } catch (e) {
-        console.error('Cloudinary silme hatası (üst tavan aşımı):', e.message);
-      }
-      return res.status(413).json({
-        error: `Video çok büyük (${(bytes / (1024 * 1024)).toFixed(1)}MB). Lütfen daha küçük bir video seç.`,
-      });
-    }
-
-    // Dosya boyutu sınırı — kullanıcıya özel bir değer varsa o, yoksa genel
-    // ayar geçerlidir. "bytes" Cloudinary'nin yükleme sonrası döndürdüğü
-    // gerçek dosya boyutudur; client tarafındaki kontroller atlatılsa bile
-    // burada yakalanır. Kırpılmış videolarda bu kontrol atlanır (yukarıdaki
-    // üst tavan zaten geçerli) çünkü fiilen servis edilecek klip çok daha
-    // küçüktür.
-    const sizeLimit = type === 'video' ? limits.videoBytes : limits.imageBytes;
-    const skipByteCheck = type === 'video' && !!trimmed;
-
-    if (!skipByteCheck && typeof bytes === 'number' && bytes > sizeLimit) {
-      try {
-        await cloudinary.uploader.destroy(publicId, { resource_type: type });
-      } catch (e) {
-        console.error('Cloudinary silme hatası (boyut aşımı):', e.message);
-      }
-      const limitMb = (sizeLimit / (1024 * 1024)).toFixed(1);
-      return res.status(413).json({
-        error: `Dosya çok büyük. ${type === 'video' ? 'Videolar' : 'Fotoğraflar'} en fazla ${limitMb}MB olabilir.`,
-      });
-    }
-
-    // Video süresi sınırı — kullanıcıya özel bir değer varsa o, yoksa genel
-    // ayar geçerlidir. Kırpma seçildiyse "durationSec" fiilen servis
-    // edilecek klip uzunluğudur (client tarafında kaydırıcıyla sınıra göre
-    // zaten sınırlandırılmıştır); burada son kez doğrulanır.
-    if (type === 'video' && typeof durationSec === 'number' && durationSec > limits.videoDurationSec + 2) {
-      try {
-        await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
-      } catch (e) {
-        console.error('Cloudinary silme hatası (süre aşımı):', e.message);
-      }
-      const limitLabel = formatDuration(limits.videoDurationSec);
-      return res.status(413).json({
-        error: `Video çok uzun (${Math.round(durationSec)} sn). Videolar en fazla ${limitLabel} olabilir.`,
-      });
+    // Her anıda EN AZ 1 etiket zorunlu ("croshy" kullanılamaz)
+    const tagRes = collectTags({ tagsInput: req.body.tags, caption: cleanCaption.slice(0, 200), required: true });
+    if (tagRes.error) {
+      await kill('etiket');
+      return res.status(400).json({ error: tagRes.error });
     }
 
     const item = {
@@ -256,7 +209,7 @@ app.post(
       userId: req.session.userId,
       ip,
       caption: cleanCaption.slice(0, 200),
-      tags: extractTags(cleanCaption.slice(0, 200)), // #etiket
+      tags: tagRes.tags,
       status: 'pending',
       createdAt: Date.now(),
     };

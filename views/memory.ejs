@@ -14,12 +14,12 @@
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="icon" type="image/png" sizes="32x32" href="/img/logo-64.png" />
 <link rel="apple-touch-icon" href="/img/logo-192.png" />
-<script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
-<link rel="stylesheet" href="/css/style.css" />
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="theme-color" content="#0b0a14" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <script src="/js/pwa.js" defer></script>
+<script>(function(){var m=document.cookie.match(/(?:^|; )croshy_theme=([^;]+)/);if(m&&/^[a-z]+$/.test(m[1]))document.documentElement.classList.add('theme-'+m[1]);})();</script>
+<link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
   <a class="skip-link" href="#icerik">İçeriğe geç</a>
@@ -70,6 +70,12 @@
     </nav>
   </header>
 
+  <%
+    var tags = locals.tags || [];
+    var isOwner = !!locals.isOwner;
+    var commentTotal = locals.commentTotal != null ? locals.commentTotal : comments.length;
+    var reactEntries = Object.entries(reactions.counts || {}).filter(function(e) { return e[1] > 0; }).sort(function(a, b) { return b[1] - a[1]; });
+  %>
   <main class="memory-page" id="icerik" data-id="<%= item.id %>" data-logged-in="<%= loggedIn ? '1' : '0' %>" data-can-interact="<%= canInteract ? '1' : '0' %>">
     <article class="memory-view">
       <div class="memory-media">
@@ -91,31 +97,37 @@
         </div>
 
         <% if (item.caption) { %><p class="memory-caption"><%- renderRich(item.caption) %></p><% } %>
+        <% if (tags.length) { %>
+          <div class="memory-tags" aria-label="Etiketler"><% tags.forEach(function(t) { %><a class="chip" href="/?tag=<%= encodeURIComponent(t) %>">#<%= t %></a><% }) %></div>
+        <% } %>
 
         <div class="memory-actions">
           <button type="button" class="like-btn memory-like <%= likedByMe ? 'liked' : '' %>" id="memoryLike" aria-pressed="<%= likedByMe ? 'true' : 'false' %>" aria-label="Beğen">
             <span class="heart"><%= likedByMe ? '❤️' : '🤍' %></span><span class="like-count" id="likeCount"><%= likeTotal %></span>
           </button>
-          <div class="reaction-bar" id="reactionBar" role="group" aria-label="Tepkiler">
-            <% EMOJIS.forEach(function(e) { %>
-              <button type="button" class="react-btn <%= reactions.mine.includes(e) ? 'active' : '' %>" data-emoji="<%= e %>" aria-pressed="<%= reactions.mine.includes(e) ? 'true' : 'false' %>">
-                <span><%= e %></span><span class="react-count"><%= reactions.counts[e] || 0 %></span>
+          <div class="react-chips" id="reactChips" role="group" aria-label="Tepkiler">
+            <% reactEntries.forEach(function(e) { %>
+              <button type="button" class="react-chip <%= reactions.mine.includes(e[0]) ? 'active' : '' %>" data-emoji="<%= e[0] %>" aria-pressed="<%= reactions.mine.includes(e[0]) ? 'true' : 'false' %>">
+                <span><%= e[0] %></span><span class="react-count"><%= e[1] %></span>
               </button>
             <% }) %>
           </div>
+          <button type="button" class="btn small" id="reactOpen" aria-haspopup="true">😊＋ Tepki ver</button>
         </div>
 
         <div class="memory-tools">
           <button type="button" class="btn small" id="shareBtn" data-url="<%= pageUrl %>">🔗 Paylaş</button>
+          <button type="button" class="btn small" id="saveBtn" aria-haspopup="true">🔖 Kaydet</button>
           <a href="/random" class="btn small">🎲 Rastgele Anı</a>
-          <% if (loggedIn && !locals.isOwner) { %><button type="button" class="btn small ghost" id="reportBtn">🚩 Şikayet et</button><% } %>
+          <% if (isOwner && item.status === 'approved') { %><button type="button" class="btn small" id="pinProfileBtn" data-id="<%= item.id %>" data-pinned="<%= locals.isPinnedOnProfile ? '1' : '0' %>"><%= locals.isPinnedOnProfile ? '📌 Vitrinden kaldır' : '📌 Profilimde sabitle' %></button><% } %>
+          <% if (loggedIn && !isOwner) { %><button type="button" class="btn small ghost" id="reportBtn">🚩 Şikayet et</button><% } %>
           <a href="/" class="btn small ghost">← Tüm Anılar</a>
         </div>
       </div>
     </article>
 
     <section class="comments" id="comments" aria-labelledby="commentsTitle">
-      <h2 id="commentsTitle">💬 Yorumlar (<span id="commentCount"><%= comments.length %></span>)</h2>
+      <h2 id="commentsTitle">💬 Yorumlar (<span id="commentCount"><%= commentTotal %></span>)</h2>
 
       <% if (canInteract) { %>
         <form class="comment-form" id="commentForm">
@@ -130,20 +142,7 @@
       <% } %>
 
       <ul class="comment-list" id="commentList">
-        <% comments.forEach(function(c) { %>
-          <li class="comment" data-id="<%= c.id %>">
-            <% if (c.avatarUrl) { %><img class="comment-avatar" src="<%= c.avatarUrl %>" alt="" /><% } else { %><span class="comment-avatar fallback"><%= c.username.charAt(0).toUpperCase() %></span><% } %>
-            <div class="comment-main">
-              <div class="comment-head">
-                <a href="/u/<%= encodeURIComponent(c.username) %>" class="comment-author"><%- c.nameHtml %></a>
-                <time><%= new Date(c.createdAt).toLocaleString('tr-TR') %></time>
-                <% if (loggedIn && !c.isMine) { %><button type="button" class="comment-report" data-report-comment="<%= c.id %>" aria-label="Yorumu şikayet et">🚩</button><% } %>
-                <% if (c.canDelete) { %><button type="button" class="comment-del" data-del="<%= c.id %>" aria-label="Yorumu sil">🗑️</button><% } %>
-              </div>
-              <div class="comment-body"><%- c.bodyHtml %></div>
-            </div>
-          </li>
-        <% }) %>
+        <% comments.forEach(function(c) { %><%- include('partials/comment', { c: c, isReply: false, loggedIn: loggedIn, canInteract: canInteract }) %><% }) %>
       </ul>
       <% if (comments.length === 0) { %><p class="comment-note" id="noComments">Henüz yorum yok. İlk yorumu sen yaz! ✨</p><% } %>
     </section>
@@ -177,6 +176,9 @@
   <script src="/js/social-menu.js"></script>
   <script src="/js/auth-nav.js"></script>
   <script src="/js/feedback-widget.js"></script>
+  <script src="/js/reaction-picker.js"></script>
+  <script src="/js/save-menu.js"></script>
   <script src="/js/memory-page.js"></script>
+  <script src="/js/cookie-banner.js"></script>
 </body>
 </html>

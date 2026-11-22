@@ -5,6 +5,7 @@ const db = require('../db');
 const likes = require('../likes');
 const users = require('../users');
 const social = require('../social');
+const { topReactions } = require('./lib/reactions');
 
 const TTL_MS = 10 * 1000;
 let cache = null;
@@ -14,16 +15,18 @@ async function getSnapshot() {
   if (cache && Date.now() - cache.at < TTL_MS) return cache;
   if (building) return building;
   building = (async () => {
-    const [items, likeCounts, avatarMap, commentCounts] = await Promise.all([
+    const [items, likeCounts, avatarMap, commentCounts, reactionCounts] = await Promise.all([
       db.getApprovedItems(),
       likes.getAllCounts(),
       users.getAllAvatars(),
       social.commentCountsAll().catch(() => ({})),
+      social.reactionCountsAll().catch(() => ({})),
     ]);
     const list = items.map(({ ip: _ip, ...rest }) => ({
       ...rest,
       likes: likeCounts[rest.id] || 0,
       commentCount: commentCounts[rest.id] || 0,
+      topReactions: topReactions(reactionCounts[rest.id], 2, social.EMOJIS),
       uploaderAvatar: (avatarMap[rest.uploaderName] || {}).avatarUrl || null,
       uploaderStyle: (avatarMap[rest.uploaderName] || {}).nameStyle || null,
     }));

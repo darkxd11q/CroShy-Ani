@@ -25,6 +25,8 @@ app.get(
       .map((i) => ({ ...i, likes: likeCounts[i.id] || 0, ip: undefined }))
       .sort((a, b) => b.createdAt - a.createdAt);
     const totalLikes = approvedItems.reduce((sum, i) => sum + i.likes, 0);
+    // Vitrin anısı: hâlâ onaylı ve yayındaysa profilin en üstünde gösterilir
+    const pinned = user.pinnedItemId ? approvedItems.find((i) => i.id === user.pinnedItemId) || null : null;
 
     res.render('public-profile', {
       profileUsername: user.username,
@@ -38,6 +40,7 @@ app.get(
       approvedCount: approvedItems.length,
       totalLikes,
       items: approvedItems,
+      pinned,
       isOwnProfile: req.session && req.session.username === user.username,
     });
   })
