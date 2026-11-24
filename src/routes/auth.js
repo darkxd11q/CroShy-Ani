@@ -1,6 +1,7 @@
 // Giriş / kayıt / çıkış.
 const { adminGuard, adminLoginLimiter, app, asyncRoute, clearRememberCookie, crypto, hashPassword, isProd, issueRememberCookie, path, registerLimiter, requireSuperAdminApi, resolveNext, safeNext, safeStringEqual, session, syncThemeCookie, userGuard, userLoginLimiter, users, verifyHashedPassword, verifyPassword } = require('../core');
 const recovery = require('../../recovery');
+const { LATEST: LATEST_RELEASE } = require('../releases');
 const admins = require('../../admins');
 const totp = require('../lib/totp');
 const { record: auditRecord } = require('../audit');
@@ -108,6 +109,9 @@ app.post(
       }
       throw e;
     }
+
+    // Yeni hesap güncelleme duyurusunu görmez (zaten en yeni sürümle başlıyor)
+    users.setSeenRelease(user.id, LATEST_RELEASE.id).catch(() => {});
 
     // Kayıtta 8 kurtarma kodu üretilir (tablo henüz yoksa kayıt yine de tamamlanır)
     let recoveryCodes = null;
@@ -272,16 +276,43 @@ app.post(
 
 // Herhangi bir sayfa yükünde çağrılıp "otomatik giriş yapıldı" bilgisini
 // bir kereliğine döndüren, herkese açık uç nokta (giriş şart değil).
-app.get('/api/session-status', (req, res) => {
-  const justAuto = !!(req.session && req.session.justAutoLoggedIn);
-  if (req.session && justAuto) req.session.justAutoLoggedIn = false;
-  res.json({
-    loggedIn: !!(req.session && (req.session.userId || req.session.isAdmin)),
-    isAdmin: !!(req.session && req.session.isAdmin),
-    username: (req.session && req.session.username) || null,
-    justAutoLoggedIn: justAuto,
-  });
-});
+// Geçiş bilgisi (normal hesap <-> yönetici) 60 sn oturumda önbelleğe alınır; her sayfa yükünde DB'ye gitmez.
+async function switchInfo(req) {
+  const sess = req.session;
+  if (!sess) return { canSwitch: null, switchNeedsTotp: false };
+  if (sess.sw && Date.now() - sess.sw.at < 60 * 1000) return sess.sw.value;
+  let value = { canSwitch: null, switchNeedsTotp: false };
+  try {
+    if (sess.userId) {
+      const a = await admins.findByLinkedUser(sess.userId);
+      if (a && !a.disabled) value = { canSwitch: 'admin', switchNeedsTotp: !!a.totpEnabled };
+    } else if (sess.isAdmin && sess.adminId) {
+      const a = await admins.findById(sess.adminId);
+      if (a && !a.disabled && a.linkedUserId) value = { canSwitch: 'user', switchNeedsTotp: false };
+    }
+  } catch {
+    return value; // veritabanı sorunu: önbelleğe alma
+  }
+  sess.sw = { at: Date.now(), value };
+  return value;
+}
+
+app.get(
+  '/api/session-status',
+  asyncRoute(async (req, res) => {
+    const justAuto = !!(req.session && req.session.justAutoLoggedIn);
+    if (req.session && justAuto) req.session.justAutoLoggedIn = false;
+    const sw = await switchInfo(req);
+    res.json({
+      loggedIn: !!(req.session && (req.session.userId || req.session.isAdmin)),
+      isAdmin: !!(req.session && req.session.isAdmin),
+      username: (req.session && req.session.username) || null,
+      justAutoLoggedIn: justAuto,
+      canSwitch: sw.canSwitch,
+      switchNeedsTotp: sw.switchNeedsTotp,
+    });
+  })
+);
 
 // Giriş/kayıt kartının HTML parçası — ana sayfadaki pencere de, /login ve
 // /register sayfaları da AYNI kartı kullanır (tek tasarım).

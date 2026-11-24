@@ -56,6 +56,9 @@ tamamen üye tabanlı çalışır ve herkesin kendi profili vardır.
 - 📝 **Taslaklar:** hazırladığın anıyı yayınlamadan sakla, sonra paylaş (günlük hakka yayınlarken sayılır)
 - 😊 Emoji tepkileri bir tuşla açılan seçiciyle; her kartta en çok verilen 2 emoji görünür
 - 🏷️ Her anıda en az 1 etiket zorunlu; "sık kullanılanlar" gerçek kullanımdan gelir (`#croshy` kullanılamaz)
+- 🎉 Güncellemeden sonraki ilk girişte **"Neler yeni?"** tanıtımı: her özelliğe özgü auralı/animasyonlu slaytlar (yeni duyuru için `src/releases.js`'e giriş ekle)
+- 🛡️ Yöneticiler normal hesapları ile yönetici hesapları arasında **şifresiz** geçiş yapabilir (panelden bir kez bağlanır)
+- Bir anıya tıklayınca yorumlar ve tepkilerin olduğu sayfa doğrudan açılır
 - Yanlışlıkla silinen bir anı, kısa bir süre içinde geri getirilebilir
 
 **Tasarım**

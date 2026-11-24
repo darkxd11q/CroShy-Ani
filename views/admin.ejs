@@ -12,6 +12,7 @@
 <meta name="theme-color" content="#0b0a14" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <script src="/js/pwa.js" defer></script>
+<script src="/js/whats-new.js" defer></script>
 </head>
 <body>
 
@@ -58,6 +59,7 @@
         </div>
       </div>
       <a href="/" class="btn ghost">Siteyi Gör</a>
+      <% if (myAdmin.linkedUser) { %><button type="button" class="btn small" id="switchToUser" title="Şifresiz: normal hesabına geç">👤 Normal hesabıma geç</button><% } %>
       <form method="POST" action="/admin/logout">
         <button type="submit" class="btn small">Çıkış Yap</button>
       </form>
@@ -143,6 +145,23 @@
           <input type="password" id="pwNew" placeholder="Yeni şifre (en az 10 karakter)" autocomplete="new-password" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
           <button type="button" class="btn primary small" id="pwChangeBtn">Güncelle</button>
         </div>
+      <% } %>
+      <% if (myAdmin.isDb) { %>
+        <h3 style="margin:22px 0 8px; font-size:.95rem;">👤 Normal hesabım (şifresiz geçiş)</h3>
+        <% if (myAdmin.linkedUser) { %>
+          <p class="profile-section-sub">Bağlı hesap: <strong><%= myAdmin.linkedUser %></strong>. İki hesap arasında şifre yazmadan tek tuşla geçebilirsin (normal hesabın menüsünde "🛡️ Admin paneline geç" görünür<%= myAdmin.totpEnabled ? '; 2 adımlı doğrulaman açık olduğu için kod istenir' : '' %>).</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn small" id="switchToUser2">👤 Şimdi normal hesabıma geç</button>
+            <button type="button" class="btn small danger" id="unlinkUserBtn">Bağlantıyı kaldır</button>
+          </div>
+        <% } else { %>
+          <p class="profile-section-sub">Normal (anı paylaştığın) hesabını bir kez bağla; sonra iki hesap arasında şifre yazmadan geçersin. Şifren yalnızca doğrulama için kullanılır, saklanmaz.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="text" id="linkUserName" placeholder="Normal hesap kullanıcı adı" autocomplete="off" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+            <input type="password" id="linkUserPw" placeholder="Normal hesap şifresi" autocomplete="off" style="background: rgba(255,255,255,0.04); border:1px solid var(--card-border); border-radius:12px; padding:10px 12px; color: var(--text);" />
+            <button type="button" class="btn primary small" id="linkUserBtn">Bağla</button>
+          </div>
+        <% } %>
       <% } %>
       <div class="avatar-status" id="myAdminStatus" role="status"></div>
     </div>

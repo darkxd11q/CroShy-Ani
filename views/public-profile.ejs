@@ -12,6 +12,7 @@
 <meta name="theme-color" content="#0b0a14" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <script src="/js/pwa.js" defer></script>
+<script src="/js/whats-new.js" defer></script>
 </head>
 <body>
 
@@ -146,7 +147,9 @@
     document.querySelectorAll('.public-item-card').forEach((card) => {
       card.addEventListener('click', () => {
         const idx = Number(card.dataset.index);
-        openLightbox(PROFILE_ITEMS[idx]);
+        const it = PROFILE_ITEMS[idx];
+        if (it && it.id) location.href = '/m/' + encodeURIComponent(it.id) + '#tepkiler';
+        else openLightbox(it);
       });
     });
   </script>

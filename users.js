@@ -22,6 +22,7 @@ function fromRow(row) {
     banned: !!row.banned,
     bannedReason: row.banned_reason || null,
     pinnedItemId: row.pinned_item_id || null,
+    seenRelease: row.seen_release || null,
     customImageBytes: row.custom_image_bytes != null ? Number(row.custom_image_bytes) : null,
     customVideoBytes: row.custom_video_bytes != null ? Number(row.custom_video_bytes) : null,
     customVideoDurationSec: row.custom_video_duration_sec != null ? Number(row.custom_video_duration_sec) : null,
@@ -328,6 +329,12 @@ async function revokeBadge(username, badge) {
   return data ? fromRow(data) : null;
 }
 
+// Güncelleme duyurusu: bu kişi hangi sürümü gördü
+async function setSeenRelease(userId, releaseId) {
+  const { error } = await supabase.from('app_users').update({ seen_release: releaseId }).eq('id', userId);
+  if (error) throw error;
+}
+
 // Profilde en üstte gösterilen "vitrin anısı" (null = kaldır)
 async function setPinnedItem(userId, itemId) {
   const { error } = await supabase.from('app_users').update({ pinned_item_id: itemId || null }).eq('id', userId);
@@ -424,6 +431,7 @@ module.exports = {
   searchUsers,
   setBanned,
   setPinnedItem,
+  setSeenRelease,
   listBanned,
   purgeExpiredBadges,
   _fromRow: fromRow,

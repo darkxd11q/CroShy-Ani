@@ -72,6 +72,7 @@ app.get(
     const approvedItems = approvedRaw.items.map((i) => ({ ...i, likes: pageLikes[i.id] || 0 }));
     const approvedTotal = approvedRaw.total;
 
+    const linkedUserName = myAdminRecord && myAdminRecord.linkedUserId ? ((await users.findUserById(myAdminRecord.linkedUserId).catch(() => null)) || {}).username || null : null;
     res.render('admin', {
       pending,
       approvedCount,
@@ -89,6 +90,7 @@ app.get(
         isDb: !!myAdminRecord,
         totpEnabled: !!(myAdminRecord && myAdminRecord.totpEnabled),
         mustChange: !!(myAdminRecord && myAdminRecord.mustChangePassword),
+        linkedUser: linkedUserName,
       },
       deleteRetentionMs: DELETE_RETENTION_MS,
       username: req.session.username || 'admin',

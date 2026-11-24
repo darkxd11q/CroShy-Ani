@@ -12,6 +12,7 @@ function fromRow(r) {
     mustChangePassword: !!r.must_change_password,
     createdAt: Number(r.created_at),
     lastLoginAt: r.last_login_at ? Number(r.last_login_at) : null,
+    linkedUserId: r.linked_user_id || null,
   };
 }
 
@@ -69,9 +70,22 @@ const setDisabled = (id, disabled) => update(id, { disabled: !!disabled });
 const setTotp = (id, { secretEnc, enabled }) => update(id, { totp_secret: secretEnc || null, totp_enabled: !!enabled });
 const touchLogin = (id) => update(id, { last_login_at: Date.now() });
 
+// Admin <-> normal hesap bağlantısı (şifresiz geçiş için)
+async function findByLinkedUser(userId) {
+  if (!userId) return null;
+  const { data, error } = await supabase.from('admins').select('*').eq('linked_user_id', userId).maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data) : null;
+}
+const setLinkedUser = (id, userId) => update(id, { linked_user_id: userId || null });
+async function clearLinksForUser(userId) {
+  const { error } = await supabase.from('admins').update({ linked_user_id: null }).eq('linked_user_id', userId);
+  if (error) throw error;
+}
+
 async function remove(id) {
   const { error } = await supabase.from('admins').delete().eq('id', id);
   if (error) throw error;
 }
 
-module.exports = { revokedAt, findByUsername, findById, list, create, updatePassword, setDisabled, setTotp, touchLogin, remove };
+module.exports = { findByLinkedUser, setLinkedUser, clearLinksForUser, revokedAt, findByUsername, findById, list, create, updatePassword, setDisabled, setTotp, touchLogin, remove };

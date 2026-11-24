@@ -50,7 +50,7 @@ window.getSessionStatus =
   }
 
   // Hesap menüsü: Profilim / Genel profilim / Kod / Çıkış tek bir tuşun arkasında
-  function accountMenu(name) {
+  function accountMenu(name, s) {
     const root = document.createElement('div');
     root.className = 'nav-menu';
 
@@ -100,7 +100,37 @@ window.getSessionStatus =
     lo.textContent = '🚪 Çıkış yap';
     logout.appendChild(lo);
 
-    panel.append(item('/profile', '👤 Profilim'), item('/koleksiyonlar', '🔖 Kaydettiklerim'), item('/u/' + encodeURIComponent(name), '🌐 Herkese açık profilim'), item('/redeem', '🎟️ Kod kullan'), item('/yilim', '🎁 Yıl özetim'), sep(), logout);
+    // Bağlı bir yönetici hesabı varsa: şifresiz "Admin paneline geç" (2FA açıksa kod sorulur)
+    const extra = [];
+    if (s && s.canSwitch === 'admin') {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'nav-menu-item';
+      sw.setAttribute('role', 'menuitem');
+      sw.textContent = '🛡️ Admin paneline geç';
+      sw.addEventListener('click', async () => {
+        sw.disabled = true;
+        let body = { to: 'admin' };
+        try {
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const res = await fetch('/api/identity/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const d = await res.json().catch(() => ({}));
+            if (res.ok) return goTo(d.redirect || '/admin');
+            if (d.needTotp) {
+              const code = prompt(d.error || 'Doğrulama kodu (2 adımlı doğrulama):');
+              if (!code) break;
+              body = { to: 'admin', totp: code };
+              continue;
+            }
+            alert(d.error || 'Geçiş yapılamadı.');
+            break;
+          }
+        } catch {}
+        sw.disabled = false;
+      });
+      extra.push(sw);
+    }
+    panel.append(item('/profile', '👤 Profilim'), item('/koleksiyonlar', '🔖 Kaydettiklerim'), item('/u/' + encodeURIComponent(name), '🌐 Herkese açık profilim'), item('/redeem', '🎟️ Kod kullan'), item('/yilim', '🎁 Yıl özetim'), ...extra, sep(), logout);
     root.append(btn, panel);
 
     const items = () => [...panel.querySelectorAll('[role="menuitem"]')];
@@ -135,6 +165,27 @@ window.getSessionStatus =
     return root;
   }
 
+  const goTo = (u) => (window.CROSHY_NAVIGATE ? window.CROSHY_NAVIGATE(u) : (location.href = u));
+
+  // Yönetici oturumunda: şifresiz "Normal hesabıma geç"
+  function switchToUserButton() {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn';
+    b.textContent = '👤 Normal hesabım';
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        const res = await fetch('/api/identity/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: 'user' }) });
+        const d = await res.json().catch(() => ({}));
+        if (res.ok) return goTo(d.redirect || '/');
+        alert(d.error || 'Geçiş yapılamadı.');
+      } catch {}
+      b.disabled = false;
+    });
+    return b;
+  }
+
   function addButton() {
     const a = document.createElement('a');
     a.href = '/upload';
@@ -152,9 +203,9 @@ window.getSessionStatus =
   function render(s) {
     cluster.textContent = '';
     if (s.loggedIn && s.isAdmin) {
-      cluster.append(link('/admin', 'btn primary', '🛡️ Admin Paneli'), logoutForm('/admin/logout'));
+      cluster.append(link('/admin', 'btn primary', '🛡️ Admin Paneli'), ...(s.canSwitch === 'user' ? [switchToUserButton()] : []), logoutForm('/admin/logout'));
     } else if (s.loggedIn) {
-      cluster.append(buildBell(), addButton(), accountMenu(s.username));
+      cluster.append(buildBell(), addButton(), accountMenu(s.username, s));
     } else {
       const b = document.createElement('button');
       b.type = 'button';

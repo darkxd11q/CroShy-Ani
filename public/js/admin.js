@@ -808,3 +808,49 @@ document.querySelectorAll('[data-report-action]').forEach((btn) => {
   });
   more.addEventListener('click', () => load(false).catch((e) => alert('Hata: ' + e.message)));
 })();
+
+
+// ---------- Normal hesap <-> yönetici geçişi ----------
+(function () {
+  const go = (u) => (window.CROSHY_NAVIGATE ? window.CROSHY_NAVIGATE(u) : (location.href = u));
+  const post = (url, body) => adminFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const status = document.getElementById('myAdminStatus');
+  const say = (m) => status && ((status.textContent = m), (status.className = 'avatar-status err'));
+
+  async function toUser() {
+    try {
+      const r = await post('/api/identity/switch', { to: 'user' });
+      go(r.redirect || '/');
+    } catch (e) {
+      alert('Hata: ' + e.message);
+    }
+  }
+  ['switchToUser', 'switchToUser2'].forEach((id) => {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener('click', toUser);
+  });
+
+  const link = document.getElementById('linkUserBtn');
+  if (link) {
+    link.addEventListener('click', async () => {
+      try {
+        await post('/api/identity/link-user', { username: document.getElementById('linkUserName').value, password: document.getElementById('linkUserPw').value });
+        window.location.reload();
+      } catch (e) {
+        say(e.message);
+      }
+    });
+  }
+  const unlink = document.getElementById('unlinkUserBtn');
+  if (unlink) {
+    unlink.addEventListener('click', async () => {
+      if (!confirm('Normal hesap bağlantısı kaldırılsın mı? (Şifresiz geçiş kapanır)')) return;
+      try {
+        await post('/api/identity/unlink');
+        window.location.reload();
+      } catch (e) {
+        say(e.message);
+      }
+    });
+  }
+})();

@@ -19,6 +19,8 @@ require('./routes/discover');
 require('./routes/collections');
 require('./routes/drafts');
 require('./routes/pins');
+require('./routes/whatsnew');
+require('./routes/identity');
 require('./routes/admin_accounts');
 require('./routes/notfound');
 

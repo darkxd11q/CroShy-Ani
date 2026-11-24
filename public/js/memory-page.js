@@ -23,6 +23,21 @@
     return e;
   };
 
+  // Galeriden gelindiyse (#tepkiler) doğrudan tepki + yorum bölümüne kaydır; görsel yüklenince yer kaymasın diye tekrar hizala
+  if (location.hash === '#tepkiler') {
+    const info = document.getElementById('tepkiler');
+    let userMoved = false;
+    ['wheel', 'touchmove', 'keydown'].forEach((t) => window.addEventListener(t, () => (userMoved = true), { once: true, passive: true }));
+    const align = () => !userMoved && info && info.scrollIntoView({ block: 'start' });
+    align();
+    const media = document.querySelector('.memory-media img, .memory-media video');
+    if (media) {
+      media.addEventListener('load', align, { once: true });
+      media.addEventListener('loadedmetadata', align, { once: true });
+    }
+    setTimeout(align, 400);
+  }
+
   // ---- Beğeni ----
   const likeBtn = document.getElementById('memoryLike');
   if (likeBtn) {

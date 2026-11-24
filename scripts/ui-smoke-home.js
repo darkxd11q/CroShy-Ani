@@ -47,7 +47,8 @@ w.fetch = async (url, opts = {}) => {
 };
 
 // ---- betikleri yükle (lightbox + main aynı kapsamda) ----
-w.eval(fs.readFileSync(root + '/js/lightbox.js', 'utf8') + '\n' + fs.readFileSync(root + '/js/main.js', 'utf8'));
+const navs = []; w.CROSHY_NAVIGATE = (u) => navs.push(u);
+w.eval(fs.readFileSync(root + '/js/media-window.js', 'utf8') + '\n' + fs.readFileSync(root + '/js/main.js', 'utf8'));
 
 (async () => {
   await tick(8);
@@ -74,9 +75,11 @@ w.eval(fs.readFileSync(root + '/js/lightbox.js', 'utf8') + '\n' + fs.readFileSyn
   check('gönderen avatarı küçük .card-avatar olarak eklendi', !!T.querySelector('.memory-card img.card-avatar'));
   check('renkli isim (gradyan) uygulandı', !!T.querySelector('.name-grad'));
   check('yorum sayısı chip\'i anı sayfasına gidiyor', !!T.querySelector('a.comment-chip[href^="/m/i"]'));
-  check('görseller Cloudinary ile küçültülüyor (f_auto,q_auto,w_720)', T.querySelector('img[loading="lazy"]').src.includes('f_auto,q_auto,w_720,c_limit'));
+  check('görseller Cloudinary ile küçültülüyor (f_auto,q_auto,w_720)', T.querySelector('img').src.includes('f_auto,q_auto,w_720,c_limit'));
 
-  const vid = T.querySelector('video[data-src]');
+  const allVids = T.querySelectorAll('video[data-src]');
+  check('ön yükleme sınırı: ilk 2 video (aradaki fotoğraflarla) hazırlanır, 3. video ve ötesi YÜKLENMEZ', allVids[0].getAttribute('src') && allVids[1].getAttribute('src') && !allVids[2].getAttribute('src') && T.querySelectorAll('img:not([src])').length >= 10, [...allVids].map((v) => !!v.getAttribute('src')).join(','));
+  const vid = allVids[2];
   check('video başta yüklenmiyor (src yok, data-src var)', !!vid && !vid.getAttribute('src'));
   const videoIO = IOs.find((io) => io.targets.has(vid));
   videoIO.cb([{ target: vid, isIntersecting: true, intersectionRatio: 1 }]);
@@ -89,13 +92,11 @@ w.eval(fs.readFileSync(root + '/js/lightbox.js', 'utf8') + '\n' + fs.readFileSyn
   likeStatus = 200; likeBtn.click(); await tick(5);
   check('girişli beğeni: sayı ve durum güncellendi', likeBtn.classList.contains('liked') && likeBtn.querySelector('.like-count').textContent === '99' && likeBtn.getAttribute('aria-pressed') === 'true');
 
-  // lightbox
+  // karta tıklayınca yorumların ve tepkilerin olduğu anı sayfası açılır
   T.querySelector('.memory-card').click(); await tick(2);
-  const lb = w.document.getElementById('lightbox');
-  check('karta tıklayınca lightbox açıldı', !!lb && lb.classList.contains('open'));
-  check('lightbox: anı sayfası bağlantısı + rol=dialog', !!lb.querySelector('a.lightbox-link[href^="/m/i"]') && lb.getAttribute('role') === 'dialog');
-  w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await tick(1);
-  check('Esc ile lightbox kapandı', !lb.classList.contains('open'));
+  check('karta tıklayınca yorum + tepki sayfası açılır (/m/id#tepkiler)', navs.length === 1 && navs[0] === '/m/i1#tepkiler', navs.join(','));
+  T.querySelector('.memory-card').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  check('klavyeden Enter ile de açılır; lightbox artık açılmaz', navs.length === 2 && !w.document.getElementById('lightbox'));
 
   // etiket filtresi
   T.querySelector('a.tag-link').click(); await tick(8);

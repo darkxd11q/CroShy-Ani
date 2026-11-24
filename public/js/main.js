@@ -91,7 +91,7 @@ function renderMedia(item) {
   // Videolar ekrana girince yüklenir/oynar (mobil veri ve pil tasarrufu)
   return item.type === 'video'
     ? `<video data-src="${escapeHtml(item.url)}" muted loop playsinline preload="none" aria-label="${label}"></video>`
-    : `<img src="${escapeHtml(optimizeImg(item.url, 720))}" alt="${label}" loading="lazy" decoding="async" />`;
+    : `<img data-src="${escapeHtml(optimizeImg(item.url, 720))}" alt="${label}" decoding="async" />`;
 }
 
 const NAME_PRESETS = {
@@ -164,6 +164,14 @@ function renderRow(item, index) {
   `;
 }
 
+// Karta tıklayınca yorumların ve tepkilerin olduğu anı sayfası AÇILIR (doğrudan o bölüme kaydırılır)
+function goMemory(item, e) {
+  const url = '/m/' + encodeURIComponent(item.id) + '#tepkiler';
+  if (e && (e.ctrlKey || e.metaKey || e.button === 1)) return window.open(url, '_blank');
+  if (window.CROSHY_NAVIGATE) return window.CROSHY_NAVIGATE(url);
+  location.assign(url);
+}
+
 // ---- Olay yönetimi (tek yerden; sonradan eklenen kartlar da çalışır) ----
 TIMELINE.addEventListener('click', (e) => {
   const reactBtn = e.target.closest('.react-open');
@@ -188,13 +196,13 @@ TIMELINE.addEventListener('click', (e) => {
   }
   if (e.target.closest('a')) return; // gönderen profili / yorumlar: normal gezinme
   const card = e.target.closest('.memory-card');
-  if (card && items[Number(card.dataset.index)]) openLightbox(items[Number(card.dataset.index)], card);
+  if (card && items[Number(card.dataset.index)]) goMemory(items[Number(card.dataset.index)], e);
 });
 TIMELINE.addEventListener('keydown', (e) => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('memory-card')) {
     e.preventDefault();
     const it = items[Number(e.target.dataset.index)];
-    if (it) openLightbox(it, e.target);
+    if (it) goMemory(it, e);
   }
 });
 
@@ -322,6 +330,61 @@ async function fetchPage(offset) {
   return res.json();
 }
 
+// ---- Medya ön yükleme sınırı: ekranın önünde en fazla 2. videoya kadar (arası fotoğraflar dahil), video yoksa 20 fotoğraf ----
+let mediaRaf = 0;
+function scheduleMedia() {
+  if (mediaRaf) return;
+  mediaRaf = requestAnimationFrame(() => {
+    mediaRaf = 0;
+    applyMediaWindow();
+  });
+}
+function applyMediaWindow() {
+  const MW = window.CroshyMediaWindow;
+  const cards = TIMELINE.querySelectorAll('.memory-card');
+  if (!MW || cards.length === 0) return;
+  const vh = window.innerHeight || 800;
+  let first = -1;
+  let last = -1;
+  let measured = false;
+  for (let i = 0; i < cards.length; i++) {
+    const r = cards[i].getBoundingClientRect();
+    if (r.top !== 0 || r.bottom !== 0) measured = true;
+    if (r.bottom > 0 && r.top < vh) {
+      if (first < 0) first = i;
+      last = i;
+    } else if (first >= 0 && r.top >= vh) break;
+  }
+  if (!measured || first < 0) {
+    // ölçülemiyorsa (ya da hiç kart görünmüyorsa) ekrana en yakın kartı baz al
+    let nearest = 0;
+    if (measured) {
+      nearest = cards.length - 1;
+      for (let i = 0; i < cards.length; i++) if (cards[i].getBoundingClientRect().top >= 0) { nearest = i; break; }
+    }
+    first = last = nearest;
+  }
+  const load = MW.compute(items.map((it) => it.type), first, last);
+  cards.forEach((card, i) => {
+    const img = card.querySelector('img[data-src]');
+    const vid = card.querySelector('video[data-src]');
+    if (load.has(i)) {
+      if (img && !img.getAttribute('src')) img.src = img.dataset.src;
+      if (vid && !vid.getAttribute('src')) {
+        vid.preload = 'metadata';
+        vid.src = vid.dataset.src + '#t=0.1';
+      }
+    } else if (vid && vid.getAttribute('src')) {
+      // pencerenin dışında kalan videonun belleği boşaltılır
+      vid.pause();
+      vid.removeAttribute('src');
+      vid.load();
+    }
+  });
+}
+window.addEventListener('scroll', scheduleMedia, { passive: true });
+window.addEventListener('resize', scheduleMedia);
+
 function appendItems(newItems) {
   const start = items.length;
   items.push(...newItems);
@@ -332,6 +395,7 @@ function appendItems(newItems) {
     revealIO.observe(row);
     row.querySelectorAll('video[data-src]').forEach((v) => videoIO.observe(v));
   });
+  scheduleMedia();
 }
 
 async function loadGallery() {

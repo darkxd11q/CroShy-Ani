@@ -87,7 +87,7 @@ async function insertItem(item) {
 }
 
 async function approveItem(id) {
-  const { error } = await supabase.from('items').update({ status: 'approved' }).eq('id', id);
+  const { error } = await supabase.from('items').update({ status: 'approved' }).eq('id', id).eq('status', 'pending');
   if (error) throw error;
 }
 
